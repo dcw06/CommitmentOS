@@ -1,0 +1,134 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "source_observations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "reconciliation_status", "order": "ASCENDING" },
+        { "fieldPath": "observed_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "action_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "dispatch_status", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "action_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "work_block_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "action_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "execution_status", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activity_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "commitments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "commitments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle_status", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sync_generations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sync_generation_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sync_generation_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sync_generation_item_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sync_generation_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sync_generation_id", "order": "ASCENDING" },
+        { "fieldPath": "sync_generation_item_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "calendar_event_snapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "calendar_id", "order": "ASCENDING" },
+        { "fieldPath": "calendar_snapshot_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "work_blocks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "commitment_id", "order": "ASCENDING" },
+        { "fieldPath": "scheduled_start", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sync_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "planner_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "calculated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "planner_runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "calculated_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

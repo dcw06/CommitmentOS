@@ -1,0 +1,369 @@
+{
+  "checks": [
+    {
+      "detail": "{\"status\":\"live\",\"version\":\"phase4ab-live-gate4-20260814\"}",
+      "label": "gate revision health is live",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-source-sync starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-reconciliation starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-calendar-actions starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "published Calendar cursor exists",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "Calendar truth starts eligible",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "forced-412 target prefix resolves once",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is planned",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is owned by CommitmentOS",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"approval_id\":\"b143acc836542557d281781c0fe5dceadeb3c9809c4a9d32ccc2744f4932c9e0\",\"observation_id\":\"50663197e6b411454bf23dd7dde69e1bd99fd8d0a711",
+      "label": "invalid move is explicitly resolved to restore approved slot",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "repair action carries snapshot etag",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "repair action carries the invalid-move etag",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "a published planner run exists for barrier probe",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner barrier probe observation is recorded as retryable",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner observation is durable and undispatched",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "created exactly 11 transparent gate fixtures",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"accepted\",\"identifiers\":{\"sync_generation_id\":\"d0cd9d2d53e2e0c4120631c46f94c21ab1e285f2ba1022bc9e6c0375c5f62020\",\"staged_pages\":\"1\"},\"revision\":null,\"error_code\":null}",
+      "label": "page 1 task accepted",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation remains staging after page 1",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "page 1 staged exactly 10 items",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation records one provider page",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "page 1 has a continuation token",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "candidate sync token is unpromoted after page 1",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "published cursor is byte-identical after page 1",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "live publication barrier became observable",
+      "passed": true
+    },
+    {
+      "detail": "{\"detail\":\"calendar_truth_ineligible\"}",
+      "label": "executor refuses while publication barrier is held",
+      "passed": true
+    },
+    {
+      "detail": "{\"detail\":\"workflow_exception\"}",
+      "label": "planner refuses while publication barrier is held",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner refusal publishes no run",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "executor barrier refusal performs zero Calendar action",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"sync_generation_id\":\"d0cd9d2d53e2e0c4120631c46f94c21ab1e285f2ba1022bc9e6c0375c5f62020\",\"staged_items\":\"11\",\"observations_released\":\"11\"},\"revi",
+      "label": "page 2 applies and publishes",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation contains exactly two provider pages",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation publishes all 11 items",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "staged and applied manifests match",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation is published",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "publication barrier clears",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "candidate token promotes only at final publication",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "cursor revision advances exactly once",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "Calendar state revision advances exactly once",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"observation_id\":\"fa9ef28608ad74394cba9cfa68b5b71c2bf43e2307b30a88fa7b7a1184f6e4a7\",\"run_id\":\"849274649e88d3acddcaa4db5619df0ed6f4192b10291c011",
+      "label": "planner succeeds after publication",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "snapshot-driven planner run is published",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner snapshot hash matches snapshot store byte-for-byte",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner Calendar revision matches published cursor",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "forced-412 target prefix resolves once",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is planned",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is owned by CommitmentOS",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "provider truth is aligned before the new 412 run",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"approval_id\":\"8dab09659bc43293abd3d00d436744b2fa3fe8c6e88fbca01111a862d32c848c\",\"observation_id\":\"493fd571c4a6e90651e14d624ee181de95b6e581acdc",
+      "label": "invalid move is explicitly resolved to restore approved slot",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "repair action carries snapshot etag",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "repair action carries the invalid-move etag",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "intent etag equals published snapshot before 412",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "provider etag changed behind snapshot",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"outbox_id\":\"9ecb37e3d5491c42f13566000bd56e11c0238b4378c2606a0bab14eb7e67ee73\"},\"revision\":null,\"error_code\":\"calendar_precondition_stale\"}",
+      "label": "deployed executor acknowledges real provider 412",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "old intent is terminally stale_precondition",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "412 emits no action_result observation",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "412 commits one coalesced Calendar sync request",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "resumed intent preserves desired repair",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "resumed intent carries the independently synchronized etag",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"outbox_id\":\"de7166055ad7401fb0dea2ee62be7640d67267028dfed15142550e2046304637\",\"observation_id\":\"6d4af181ad729fb310e616b485935d97a82274848ebc49",
+      "label": "resumed conditional patch succeeds",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "resumed outbox is succeeded",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "provider lands at the preserved desired interval",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "adoption target prefix resolves once",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "adoption target is planned",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "adoption target is app-owned",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "valid adoption creates zero Calendar outbox mutations",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "valid adoption records one explanation",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "real move is typed and processed",
+      "passed": true
+    }
+  ],
+  "completed_at": "2026-08-14T09:25:11.923802Z",
+  "phase4a": {
+    "calendar_state_revision_after": 63,
+    "calendar_state_revision_before": 62,
+    "cursor_revision_after": 63,
+    "cursor_revision_before": 62,
+    "generation_id": "d0cd9d2d53e2",
+    "item_count": 11,
+    "page_count": 2,
+    "planner_run_id": "30ad195d7b22",
+    "snapshot_hash": "c3e2259cc129a7c7cd527321100da63a5235b14d6d2f5367176d4d8b12caa3a6"
+  },
+  "phase4b_412": {
+    "action_result_count_for_stale_intent": 0,
+    "new_etag_hash": "71bd78b5a1776175",
+    "old_etag_hash": "46ad8ed8d9f4c0a1",
+    "old_status": "stale_precondition",
+    "resumed_outbox_id": "de7166055ad7",
+    "resumed_status": "succeeded",
+    "stale_outbox_id": "9ecb37e3d549"
+  },
+  "phase4b_412_target": {
+    "event_id": "97ivh810d91k",
+    "expected_etag_hash": "46ad8ed8d9f4c0a1",
+    "outbox_id": "9ecb37e3d549",
+    "repair_trigger": "invalid_user_move_outside_planning_hours",
+    "work_block_id": "2b4568cae24f"
+  },
+  "phase4b_adoption": {
+    "event_id": "97ivh810d91k",
+    "explanation_count": 1,
+    "outbox_delta": 0,
+    "plan_revision": 12,
+    "provider_etag_hash": "7dcf39de5e19a534",
+    "work_block_id": "2b4568cae24f"
+  },
+  "result": "passed",
+  "run_id": "phase4ab-20260814T092036Z-1dbd50",
+  "service_url": "https://commitmentos-2hscowvydq-uw.a.run.app",
+  "started_at": "2026-08-14T09:20:36.861417Z"
+}

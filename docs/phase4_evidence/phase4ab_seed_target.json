@@ -1,0 +1,8 @@
+{
+  "calendar_event_id": "97ivh810d91k",
+  "commitment_id": "fe1a67cd32a7",
+  "run_tag": "phase4abgate-20260814b",
+  "scheduled_start": "2026-08-17T16:00:00Z",
+  "work_block_id": "2b4568cae24f",
+  "workflow": "seeded_observation_to_deployed_approvals_outbox_executor"
+}

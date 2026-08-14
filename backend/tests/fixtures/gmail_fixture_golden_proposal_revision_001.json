@@ -1,0 +1,51 @@
+{
+  "fixture_id": "gmail_fixture_golden_proposal_revision_001",
+  "schema_version": "gmail_fixture_v1",
+  "timezone": "America/Los_Angeles",
+  "thread_id": "thread_fixture_golden_proposal_revision_001",
+  "personas": {
+    "controlled": {
+      "display_name": "Controlled User",
+      "address": "controlled-01@fixtures.commitmentos.invalid"
+    },
+    "counterparty": {
+      "display_name": "Professor Chen",
+      "address": "professor.chen@fixtures.commitmentos.invalid"
+    }
+  },
+  "messages": [
+    {
+      "message_id": "message_fixture_golden_request_001",
+      "rfc_message_id": "<golden-proposal-request-001@fixtures.commitmentos.invalid>",
+      "direction": "inbound",
+      "from_persona": "counterparty",
+      "to_persona": "controlled",
+      "offset_day": 0,
+      "offset_time": "10:05",
+      "subject": "Proposal revision",
+      "body": "Could you take the proposal revision? The committee wants the updated methodology section before we meet."
+    },
+    {
+      "message_id": "message_fixture_golden_acceptance_002",
+      "rfc_message_id": "<golden-proposal-acceptance-002@fixtures.commitmentos.invalid>",
+      "direction": "outbound",
+      "from_persona": "controlled",
+      "to_persona": "counterparty",
+      "offset_day": 0,
+      "offset_time": "10:32",
+      "subject": "Re: Proposal revision",
+      "body": "Yes — I'll take it. I'll have the revised proposal back to you before our Friday 4 p.m. review."
+    },
+    {
+      "message_id": "message_fixture_golden_deadline_revision_003",
+      "rfc_message_id": "<golden-proposal-deadline-revision-003@fixtures.commitmentos.invalid>",
+      "direction": "inbound",
+      "from_persona": "counterparty",
+      "to_persona": "controlled",
+      "offset_day": 1,
+      "offset_time": "08:15",
+      "subject": "Re: Proposal revision",
+      "body": "Thanks! One change — could we bring the review forward to Thursday at 4 p.m.? Same agenda."
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "commitmentos"
+version = "0.1.0"
+description = "Evidence-backed commitment planning and reconciliation"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "fastapi>=0.141.1",
+    "google-adk>=2.6.3",
+    "google-api-python-client>=2.198.0",
+    "google-auth>=2.56.3",
+    "google-auth-httplib2>=0.4.1",
+    "google-auth-oauthlib>=1.4.0",
+    "google-cloud-firestore>=2.28.1",
+    "google-cloud-pubsub>=2.39.1",
+    "google-cloud-secret-manager>=2.30.0",
+    "google-cloud-tasks>=2.24.0",
+    "google-genai>=2.17.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "tzdata>=2026.3",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/commitmentos"]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.165.2",
+    "mypy>=2.3.0",
+    "pip-audit>=2.10.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.2",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["backend/tests"]
+timeout = 60
+
+[tool.ruff]
+line-length = 100
+src = ["backend/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/conftest.py" = ["E402"]

@@ -1,0 +1,27 @@
+# Cloud Run source deploy needs only the Docker build inputs.
+.gcloudignore
+.git/
+.gitignore
+.env
+.env.*
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.claude/
+.DS_Store
+
+# Product materials and local tooling are not copied by the Dockerfile.
+CommitmentOS_Build_Plan_Final.pages
+CommitmentOS_Build_Plan_Final.pdf
+Plan_Final/
+Planning Stage/
+frontend/
+docs/
+scripts/
+tests/
+infra/
+AGENTS.md
+cloudbuild.yaml

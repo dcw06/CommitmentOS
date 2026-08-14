@@ -1,0 +1,24 @@
+# Never bake local config or secrets into the image
+.env
+.env.*
+
+# Local toolchains and caches
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Not part of the backend image
+frontend/
+docs/
+Plan_Final/
+Planning Stage/
+scripts/
+tests/
+infra/
+.git/
+.DS_Store
+AGENTS.md
+cloudbuild.yaml

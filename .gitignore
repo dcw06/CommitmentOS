@@ -1,0 +1,23 @@
+# Local environment — never commit; .env.example is the committed template
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+frontend/dist/
+
+# OS / editor
+.DS_Store
+
+# Claude Code local settings
+.claude/

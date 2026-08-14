@@ -1,0 +1,96 @@
+{
+  "checks": [
+    {
+      "detail": "{\"status\":\"live\",\"version\":\"phase4ab-live-gate-20260814\"}",
+      "label": "gate revision health is live",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-source-sync starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-reconciliation starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "RUNNING",
+      "label": "queue commitmentos-calendar-actions starts RUNNING",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "published Calendar cursor exists",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "Calendar truth starts eligible",
+      "passed": true
+    },
+    {
+      "detail": "1",
+      "label": "forced-412 target prefix resolves once",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is planned",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "forced-412 target is owned by CommitmentOS",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "repair action carries snapshot etag",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "a published planner run exists for barrier probe",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"planner_run_id\":\"e416c9e761548faa74c757bf25350103299685429b607b03e25afbaa72a03b5b\",\"observation_id\":\"95e1bf442258b95be29dc",
+      "label": "planner barrier probe observation is recorded",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "planner observation is durable",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "created exactly 11 transparent gate fixtures",
+      "passed": true
+    },
+    {
+      "detail": "{\"status\":\"completed\",\"identifiers\":{\"sync_generation_id\":\"8e39551cf2c30a95817cb3fe72b816e54ff7ac19479f3b5a6d05ac5b0df2a56d\",\"staged_items\":\"8\",\"observations_released\":\"8\"},\"revisi",
+      "label": "page 1 task accepted",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "label": "generation remains staging after page 1",
+      "passed": false
+    }
+  ],
+  "completed_at": "2026-08-14T07:58:43.723289Z",
+  "failure": "RuntimeError: generation remains staging after page 1",
+  "phase4b_412_target": {
+    "event_id": "aqrvcfu1m2r7",
+    "expected_etag_hash": "54399a065539cb96",
+    "outbox_id": "43b6b3564260",
+    "work_block_id": "99423c96ecdc"
+  },
+  "result": "failed",
+  "run_id": "phase4ab-20260814T075711Z-64d56e",
+  "service_url": "https://commitmentos-2hscowvydq-uw.a.run.app",
+  "started_at": "2026-08-14T07:57:11.888145Z"
+}
