@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import re
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from conftest import CONTROLLED_USER, Phase1App
@@ -23,8 +25,10 @@ from commitmentos.api.dependencies.google_oidc import GoogleOidcDependency
 from commitmentos.api.middleware.request_context import RequestContextMiddleware
 from commitmentos.api.routers.approvals import ApprovalsRouter
 from commitmentos.api.routers.commitments import CommitmentsRouter
+from commitmentos.api.routers.completion import CompletionRouter
 from commitmentos.api.routers.controls import ControlsRouter
 from commitmentos.api.routers.dashboard import DashboardRouter
+from commitmentos.api.routers.demo import DemoRouter
 from commitmentos.api.routers.plans import PlansRouter
 from commitmentos.api.routers.task_handlers import TaskHandlersRouter
 from commitmentos.api.routers.work_blocks import WorkBlocksRouter
@@ -47,6 +51,7 @@ from commitmentos.domain.progress.models import (
     WorkBlock,
     WorkBlockExecutionState,
 )
+from commitmentos.infrastructure.static_demo import StaticDemoReadModel
 
 SESSION_TOKEN = "session-token-0001"
 CSRF_SECRET = "csrf-secret-0001"
@@ -101,6 +106,19 @@ def api(app: Phase1App) -> TestClient:
     )
     fastapi_app.include_router(
         PlansRouter(app.request_plan_undo, session, csrf).build()
+    )
+    fastapi_app.include_router(
+        CompletionRouter(app.complete_commitment, session, csrf).build()
+    )
+    fastapi_app.include_router(
+        DemoRouter(
+            StaticDemoReadModel(
+                Path(__file__).resolve().parents[2]
+                / "src"
+                / "commitmentos"
+                / "demo_data"
+            )
+        ).build()
     )
     fastapi_app.include_router(
         TaskHandlersRouter(
@@ -513,6 +531,237 @@ class TestTaskRouteContracts:
             headers={"Authorization": f"Bearer valid:{TASKS_SA}"},
         )
         assert response.status_code == 422
+
+
+# Every controlled mutation route with a schema-valid body (checklist D4:
+# "confirm every controlled mutation route rejects missing and invalid CSRF
+# tokens with zero side effects"). Targets need not exist — the rejection
+# must land before any command logic runs. `/auth/logout` is covered by the
+# same contract in test_auth_contracts.py, where the AuthRouter is mounted.
+CONTROLLED_MUTATION_ROUTES = [
+    (
+        "/api/v1/approvals/route-matrix-approval/resolve",
+        {"expected_revision": 1, "decision": "approve", "confirmed_minutes": 180},
+    ),
+    (
+        "/api/v1/controls/change",
+        {
+            "control_name": "automatic_actions",
+            "target_mode": "paused",
+            "reason": "csrf matrix",
+            "expected_control_epoch": 1,
+        },
+    ),
+    (
+        "/api/v1/work-blocks/route-matrix-block/check-in",
+        {
+            "expected_revision": 1,
+            "idempotency_key": "csrf-matrix",
+            "completed": True,
+            "verified_minutes": 30,
+            "checked_in_at": "2026-08-12T16:00:00+00:00",
+        },
+    ),
+    ("/api/v1/plans/route-matrix-plan/undo", {"idempotency_key": "csrf-matrix"}),
+    (
+        "/api/v1/commitments/route-matrix-commitment/complete",
+        {
+            "expected_revision": 1,
+            "idempotency_key": "csrf-matrix",
+            "completed_at": "2026-08-12T16:00:00+00:00",
+        },
+    ),
+]
+
+
+class TestFullCsrfSuite:
+    """D4 full CSRF suite — parametrized over every controlled mutation route."""
+
+    @pytest.mark.parametrize(("path", "body"), CONTROLLED_MUTATION_ROUTES)
+    async def test_missing_session_is_rejected_before_any_side_effect(
+        self, api: TestClient, app: Phase1App, path: str, body: dict
+    ) -> None:
+        before = copy.deepcopy(app.store)
+        response = api.post(path, json=body)
+        assert response.status_code == 401
+        assert app.store == before
+        assert app.task_dispatcher.reconciliation_tasks == []
+        assert app.task_dispatcher.calendar_action_tasks == []
+
+    @pytest.mark.parametrize(("path", "body"), CONTROLLED_MUTATION_ROUTES)
+    async def test_missing_csrf_is_rejected_before_any_side_effect(
+        self, api: TestClient, app: Phase1App, path: str, body: dict
+    ) -> None:
+        before = copy.deepcopy(app.store)
+        response = api.post(
+            path,
+            json=body,
+            cookies={"commitmentos_session": SESSION_TOKEN},
+        )
+        assert response.status_code == 403
+        assert app.store == before
+        assert app.task_dispatcher.reconciliation_tasks == []
+        assert app.task_dispatcher.calendar_action_tasks == []
+
+    @pytest.mark.parametrize(("path", "body"), CONTROLLED_MUTATION_ROUTES)
+    async def test_invalid_csrf_is_rejected_before_any_side_effect(
+        self, api: TestClient, app: Phase1App, path: str, body: dict
+    ) -> None:
+        before = copy.deepcopy(app.store)
+        response = api.post(
+            path,
+            json=body,
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": "wrong-token"},
+        )
+        assert response.status_code == 403
+        assert app.store == before
+        assert app.task_dispatcher.reconciliation_tasks == []
+        assert app.task_dispatcher.calendar_action_tasks == []
+
+    @pytest.mark.parametrize(("path", "body"), CONTROLLED_MUTATION_ROUTES)
+    async def test_auth_rejections_run_before_body_validation(
+        self, api: TestClient, app: Phase1App, path: str, body: dict
+    ) -> None:
+        # Invalid body + no credentials must never leak schema information.
+        assert api.post(path, json={"totally": "wrong-shape"}).status_code == 401
+        assert (
+            api.post(
+                path,
+                json={"totally": "wrong-shape"},
+                cookies={"commitmentos_session": SESSION_TOKEN},
+            ).status_code
+            == 403
+        )
+
+
+def _every_production_mutation_route(api: TestClient) -> list[tuple[str, str]]:
+    """Enumerate every mounted mutation method/path outside `/demo`.
+
+    Derived from the live route table so a newly added mutation route is
+    automatically part of the demo matrix (checklist D4).
+    """
+    pairs: list[tuple[str, str]] = []
+    for wrapper in api.app.routes:  # type: ignore[union-attr]
+        router = getattr(wrapper, "original_router", None)
+        routes = router.routes if router is not None else [wrapper]
+        for route in routes:
+            path = getattr(route, "path", "")
+            methods = getattr(route, "methods", None) or set()
+            if path.startswith("/demo"):
+                continue
+            for method in set(methods) & {"POST", "PUT", "PATCH", "DELETE"}:
+                concrete = re.sub(r"\{[^}]+\}", "demo-matrix-target", path)
+                pairs.append((method, concrete))
+    assert pairs, "route enumeration found no mutation routes"
+    return pairs
+
+
+class TestFullDemoMutationMatrix:
+    """D4 full demo mutation matrix — seeded judge mode can never mutate.
+
+    The demo surface is served by a separate static read model with no
+    Firestore, credential, or Google API access path; these tests prove the
+    behavioral half: every production mutation method/path attempted under
+    `/demo` is rejected with zero durable or external side effects.
+    """
+
+    async def test_every_production_mutation_path_is_rejected_under_demo(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        routes = _every_production_mutation_route(api)
+        before = copy.deepcopy(app.store)
+        for method, path in routes:
+            response = api.request(method, f"/demo{path}", json={"attempt": True})
+            assert response.status_code == 403, (method, path, response.status_code)
+        assert app.store == before
+        assert app.task_dispatcher.reconciliation_tasks == []
+        assert app.task_dispatcher.calendar_action_tasks == []
+        assert app.task_dispatcher.source_sync_tasks == []
+        assert app.calendar.mutation_log == []
+
+    async def test_demo_rejection_holds_with_live_session_context(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        # Even a fully authenticated controlled session cannot mutate through
+        # the demo surface ("live mutation endpoints reached with demo-only
+        # context" is the inverse case, covered by the session matrix above).
+        before = copy.deepcopy(app.store)
+        response = api.post(
+            "/demo/api/v1/controls/change",
+            json={
+                "control_name": "automatic_actions",
+                "target_mode": "paused",
+                "reason": "demo escape attempt",
+                "expected_control_epoch": 1,
+            },
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": CSRF_SECRET},
+        )
+        assert response.status_code == 403
+        assert app.store == before
+
+    async def test_demo_reads_serve_only_seeded_data_with_no_mutation_controls(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        before = copy.deepcopy(app.store)
+        today = api.get("/demo/today")
+        assert today.status_code == 200
+        assert today.json()["seeded"] is True
+        commitments = api.get("/demo/commitments")
+        activity = api.get("/demo/activity")
+        assert commitments.status_code == 200
+        assert activity.status_code == 200
+        for response in (today, commitments, activity):
+            # Seeded mode exposes no live mutation controls, session
+            # material, or approval endpoints.
+            body = response.text
+            assert "csrf" not in body.lower()
+            assert "/api/v1/" not in body
+            assert "set-cookie" not in response.headers
+        assert app.store == before
+
+    async def test_demo_read_model_has_no_live_data_access_path(self) -> None:
+        # Structural half of "the demo client is separate from the live API
+        # client": the read model's only state is the committed data path.
+        model = StaticDemoReadModel(Path("/nowhere"))
+        assert vars(model) == {"_data_directory": Path("/nowhere")}
+
+
+class TestCompletionRouteContract:
+    async def test_completion_route_executes_with_valid_session_and_csrf(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        block = await _check_in_fixture(app)
+        response = api.post(
+            f"/api/v1/commitments/{block.commitment_id}/complete",
+            json={
+                "expected_revision": 1,
+                "idempotency_key": "route-complete-001",
+                "completed_at": app.clock.now().isoformat(),
+            },
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": CSRF_SECRET},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        stored = app.store["commitments"][block.commitment_id]
+        assert stored["lifecycle_status"] == LifecycleStatus.COMPLETED.value
+
+    async def test_completion_route_maps_not_found(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        response = api.post(
+            "/api/v1/commitments/who-knows/complete",
+            json={
+                "expected_revision": 1,
+                "idempotency_key": "route-complete-404",
+                "completed_at": app.clock.now().isoformat(),
+            },
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": CSRF_SECRET},
+        )
+        assert response.status_code == 404
 
 
 class TestControlledRouteOrdering:

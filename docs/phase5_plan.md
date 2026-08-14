@@ -37,6 +37,12 @@ Phase 5 is 151 tests.
 
 ## Chunk 5A — Completion truth and the hardened surface
 
+**LOCAL EXIT CLOSED 2026-08-14** — all seven items below are implemented
+and locally proven: 220 tests green (baseline 151), Ruff clean, targeted
+mypy clean, and the golden dry-run reaches `completed` through the real
+workflow. Full record: `docs/phase5a_progress.md`; decision-log entry in
+the checklist. D4 checkboxes close at the 5B gate with live evidence.
+
 Everything still missing before a golden run can reach its terminal step,
 plus every D4 security surface, proven locally.
 

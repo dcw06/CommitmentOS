@@ -26,6 +26,9 @@ from fakes import (  # noqa: E402
 from commitmentos.application.commands.change_system_control import (
     ChangeSystemControl,  # noqa: E402
 )
+from commitmentos.application.commands.complete_commitment import (
+    CompleteCommitment,  # noqa: E402
+)
 from commitmentos.application.commands.execute_calendar_action import (
     ExecuteCalendarAction,  # noqa: E402
 )
@@ -185,6 +188,12 @@ class Phase1App:
             self.clock,
         )
         self.request_plan_undo = RequestPlanUndo(
+            self.uow,
+            self.observation_factory,
+            self.observation_dispatcher,
+            self.clock,
+        )
+        self.complete_commitment = CompleteCommitment(
             self.uow,
             self.observation_factory,
             self.observation_dispatcher,

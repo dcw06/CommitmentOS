@@ -8,9 +8,12 @@ from commitmentos.api.dependencies.calendar_channel import CalendarChannelVerifi
 from commitmentos.api.dependencies.controlled_session import ControlledSessionDependency
 from commitmentos.api.dependencies.csrf import CsrfProtection
 from commitmentos.api.dependencies.google_oidc import GoogleOidcDependency
+from commitmentos.api.routers.auth import AuthRouter
 from commitmentos.api.routers.calendar_webhook import CalendarWebhookRouter
 from commitmentos.api.routers.dashboard import DashboardRouter
+from commitmentos.api.routers.demo import DemoRouter
 from commitmentos.application.commands.change_system_control import ChangeSystemControl
+from commitmentos.application.commands.complete_commitment import CompleteCommitment
 from commitmentos.application.commands.execute_calendar_action import ExecuteCalendarAction
 from commitmentos.application.commands.receive_calendar_signal import ReceiveCalendarSignal
 from commitmentos.application.commands.receive_gmail_signal import ReceiveGmailSignal
@@ -49,8 +52,10 @@ from commitmentos.infrastructure.google.calendar_writer import GoogleCalendarWri
 from commitmentos.infrastructure.google.credentials import ControlledCredentialsProvider
 from commitmentos.infrastructure.google.gemini_interpreter import GeminiInterpreter
 from commitmentos.infrastructure.google.gmail_reader import GoogleGmailReader
+from commitmentos.infrastructure.google.oauth_client import GoogleOAuthClient
 from commitmentos.infrastructure.google.oidc_verifier import GoogleIdentityVerifier
 from commitmentos.infrastructure.messaging.cloud_tasks import CloudTasksDispatcher
+from commitmentos.infrastructure.static_demo import StaticDemoReadModel
 from commitmentos.workflows.reconciliation.graph import AdkReconciliationWorkflow
 from commitmentos.workflows.reconciliation.phase1_workflow import SeededReconciliationWorkflow
 
@@ -108,6 +113,7 @@ class ControlledCommandCapabilities:
     change_system_control: ChangeSystemControl
     record_work_check_in: RecordWorkCheckIn
     request_plan_undo: RequestPlanUndo
+    complete_commitment: CompleteCommitment
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,12 +260,30 @@ class ApplicationContainer:
             .payload.data.decode("utf-8")
         )
 
+    def _oauth_client_config(self) -> dict:
+        import json
+
+        from google.cloud import secretmanager
+
+        payload = (
+            secretmanager.SecretManagerServiceClient()
+            .access_secret_version(name=self._settings.oauth_client_secret_ref)
+            .payload.data.decode("utf-8")
+        )
+        return json.loads(payload)["web"]
+
     @classmethod
     def build(cls, settings: Settings) -> ApplicationContainer:
         return cls(settings)
 
     def unit_of_work(self) -> FirestoreUnitOfWork:
         return self._unit_of_work
+
+    def calendar_writer(self) -> GoogleCalendarWriter:
+        return self._calendar_writer
+
+    def firestore_client(self):  # noqa: ANN201 - third-party client type
+        return self._runner.client
 
     @property
     def observation_factory(self) -> ObservationFactory:
@@ -403,6 +427,12 @@ class ApplicationContainer:
                 self._observation_dispatcher,
                 self.clock,
             ),
+            complete_commitment=CompleteCommitment(
+                self._unit_of_work,
+                self._observation_factory,
+                self._observation_dispatcher,
+                self.clock,
+            ),
         )
 
     def planning_inputs(self) -> PlanningInputCapabilities:
@@ -432,6 +462,34 @@ class ApplicationContainer:
             session,
             self._settings.controlled_timezone,
         )
+
+    def auth_router(self, identity: IdentityDependencies) -> AuthRouter:
+        import httpx
+
+        client_config = self._oauth_client_config()
+        oauth_client = GoogleOAuthClient(
+            client_config,
+            str(self._settings.oauth_redirect_uri),
+            # Login requests only basic identity scopes; the mailbox/Calendar
+            # grant is a separate, already-stored consent (scope_set_v1).
+            ("openid", "email"),
+            httpx.AsyncClient(timeout=30),
+        )
+        return AuthRouter(
+            oauth_client,
+            self._identity_verifier,
+            self._unit_of_work,
+            identity.session,
+            identity.csrf,
+            self.clock,
+            self.id_generator,
+            self._settings.controlled_user_id,
+            self._settings.controlled_email,
+            client_config["client_id"],
+        )
+
+    def demo_router(self) -> DemoRouter:
+        return DemoRouter(StaticDemoReadModel(self._settings.demo_data_directory))
 
     def identity_dependencies(self) -> IdentityDependencies:
         settings = self._settings

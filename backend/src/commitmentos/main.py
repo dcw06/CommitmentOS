@@ -7,6 +7,7 @@ from commitmentos.api.middleware.request_context import RequestContextMiddleware
 from commitmentos.api.middleware.security_headers import SecurityHeadersMiddleware
 from commitmentos.api.routers.approvals import ApprovalsRouter
 from commitmentos.api.routers.commitments import CommitmentsRouter
+from commitmentos.api.routers.completion import CompletionRouter
 from commitmentos.api.routers.controls import ControlsRouter
 from commitmentos.api.routers.health import HealthRouter
 from commitmentos.api.routers.plans import PlansRouter
@@ -64,6 +65,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             identity.csrf,
         ).build()
     )
+    app.include_router(
+        CompletionRouter(
+            controlled.complete_commitment,
+            identity.session,
+            identity.csrf,
+        ).build()
+    )
     queries = container.queries()
     app.include_router(
         CommitmentsRouter(
@@ -91,14 +99,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ).build()
     )
 
-    # Remaining Phase 0 spike routes are the Gemini/ADK proof routes and the
-    # proven controlled-user login + seeded demo. Calendar ingress and both
-    # source synchronizers now run through the production command stack.
-    from commitmentos.spike.section7_gemini_adk import build_section7_router
-    from commitmentos.spike.section9_auth import build_auth_router
-
-    app.include_router(build_section7_router(resolved))
-    app.include_router(build_auth_router(resolved))
+    # Phase 5A: the production AuthRouter is the session issuer and the
+    # DemoRouter serves seeded judge mode; no spike module remains on any
+    # live path (D4). Spike code stays under `spike/` for the Phase 0
+    # evidence record and the local watch-management scripts only.
+    app.include_router(container.auth_router(identity).build())
+    app.include_router(container.demo_router().build())
     _assert_no_duplicate_routes(app)
     return app
 

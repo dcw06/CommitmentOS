@@ -1,0 +1,47 @@
+[
+  {
+    "seeded": true,
+    "generated_from": "golden_scenario_rev_1",
+    "title": "Send revised proposal to Professor Chen",
+    "ownership_type": "my_commitment",
+    "beneficiary": "Professor Chen",
+    "lifecycle_status": "in_progress",
+    "deadline": "Thursday 16:00",
+    "deadline_source_expression": "bring the review forward to Thursday at 4 p.m.",
+    "deadline_confidence": 0.93,
+    "risk_level": "on_track",
+    "confirmed_minutes": 180,
+    "verified_completed_minutes": 120,
+    "remaining_minutes": 60,
+    "evidence_excerpts": [
+      "Yes—I'll have it back before our Friday 4 p.m. review.",
+      "Could we bring the review forward to Thursday at 4 p.m.?"
+    ],
+    "work_blocks": [
+      {"day": "Tuesday", "start": "09:00", "end": "10:00", "execution_state": "completed", "verified_minutes": 60},
+      {"day": "Wednesday", "start": "11:00", "end": "12:00", "execution_state": "completed", "verified_minutes": 60, "note": "moved by automatic repair after a meeting conflict"},
+      {"day": "Thursday", "start": "09:00", "end": "10:00", "execution_state": "awaiting_check_in", "verified_minutes": 0}
+    ]
+  },
+  {
+    "seeded": true,
+    "generated_from": "golden_scenario_rev_1",
+    "title": "Prepare Q3 data summary for Sam",
+    "ownership_type": "my_commitment",
+    "beneficiary": "Sam",
+    "lifecycle_status": "active",
+    "deadline": "Monday 12:00",
+    "deadline_confidence": 0.9,
+    "risk_level": "on_track",
+    "confirmed_minutes": 120,
+    "verified_completed_minutes": 0,
+    "remaining_minutes": 120,
+    "evidence_excerpts": [
+      "Can you have the Q3 data summary ready for Monday's sync?"
+    ],
+    "work_blocks": [
+      {"day": "Tuesday", "start": "14:00", "end": "15:00", "execution_state": "planned", "verified_minutes": 0},
+      {"day": "Friday", "start": "10:00", "end": "11:00", "execution_state": "planned", "verified_minutes": 0}
+    ]
+  }
+]

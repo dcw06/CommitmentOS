@@ -30,6 +30,7 @@ class ActivityEventType(StrEnum):
     PLAN_UNDO_REQUESTED = "plan_undo_requested"
     COMPLETION_RECORDED = "completion_recorded"
     FAILURE_RECORDED = "failure_recorded"
+    CONTROLLED_CLEANUP_COMPLETED = "controlled_cleanup_completed"
 
 
 @dataclass(frozen=True, slots=True)

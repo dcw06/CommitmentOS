@@ -726,7 +726,7 @@ Every item below was part of the original Phase 0 checklist. Each is preserved v
 ### Leases and fencing
 
 - [x] Confirm a stale reconciliation fencing token cannot commit an outcome.
-  - Every outcome commit passes the expected fencing token to the observation CAS, which rejects a mismatch after takeover (guard exercised by every integration reconcile). Explicit worker-kill/takeover fault injection remains in the Phase 5 matrix.
+  - Every outcome commit passes the expected fencing token to the observation CAS, which rejects a mismatch after takeover (guard exercised by every integration reconcile). Explicit worker-kill/takeover fault injection landed 2026-08-14 in `tests/fault_injection/test_fault_injection_matrix.py`: one retry takes over after lease expiry with a bumped fence, and the late original worker's outcome commit cannot land (Phase 5A).
 - [x] Confirm a stale fenced lease cannot checkpoint or publish after takeover.
   - Was open by design until generation machinery existed; closed by Phase 2 D2 locally (`test_stale_fencing_token_cannot_checkpoint_or_publish` — fence checked before status on publish — and `test_worker_death_resumes_from_durable_checkpoint` with `adopt_fence` takeover) and exercised live by the Phase 4A exit's fenced barrier/publication proofs (`docs/phase4_evidence/phase4ab_gate_run.md`). Row reconciled 2026-08-14; explicit worker-kill/takeover fault injection stays in the Phase 5 matrix per the row above.
 
@@ -768,7 +768,16 @@ gate run remains (see phase2_progress "Deployment requirements").
 
 ## D4. Phase 5 gate additions — security hardening
 
+**Local proofs landed 2026-08-14 (Phase 5A)** — every row below is
+implemented and proven against the production stack over the in-memory twin
+(`docs/phase5a_progress.md`); the checkboxes close at the 5B gate when the
+same probes run against the deployed revision, per the 5B exit rule.
+
 ### Full session negative matrix
+
+Local proof: `backend/tests/contract/test_auth_contracts.py` (16 tests) over
+the production `AuthRouter`, which replaced the spike login as the session
+issuer (no spike module remains mounted).
 
 - [ ] Start login only through an allowlisted redirect target.
 - [ ] Reject missing, mismatched, expired, and replayed state.
@@ -779,14 +788,29 @@ gate run remains (see phase2_progress "Deployment requirements").
 
 ### Full CSRF suite
 
+Local proof: `TestFullCsrfSuite` in
+`backend/tests/contract/test_route_contracts.py` — parametrized over every
+controlled mutation route including the new completion route; byte-identical
+durable state and zero dispatches on every rejection; auth resolves before
+body validation.
+
 - [ ] Confirm every controlled mutation route rejects missing and invalid CSRF tokens with zero side effects.
 
 ### Webhook hardening
+
+Local proof: `backend/tests/contract/test_webhook_rate_limit.py` — 429 over
+limit with zero side effects, durable across a process restart, window
+recovery, and invalid probes unable to exhaust the valid-signal budget.
 
 - [ ] Enforce the durable per-channel rate limit.
 - [ ] Test a request exceeding the valid-signal rate limit and confirm zero side effects.
 
 ### Full demo mutation matrix
+
+Local proof: `TestFullDemoMutationMatrix` in
+`backend/tests/contract/test_route_contracts.py` — the matrix enumerates
+every mounted mutation method/path from the live route table; the demo
+surface is a separate static read model with no Firestore/credential path.
 
 - [ ] Confirm the demo client is separate from the live API client.
 - [ ] Attempt every production mutation method/path under `/demo`.
@@ -795,6 +819,11 @@ gate run remains (see phase2_progress "Deployment requirements").
 - [ ] Confirm seeded mode exposes no live mutation controls.
 
 ### Audited controlled cleanup
+
+Local proof: `backend/tests/integration/test_phase5a_cleanup.py` over
+`CleanupControlledAccount` + `scripts/reset_controlled_account.py`
+(preview → typed confirmation phrase → drift-guarded execute; snapshot-etag
+`If-Match` cancels; audit-timeline record; 5B's between-runs reset).
 
 - [ ] Complete authenticated developer cleanup as a documented command.
 - [ ] Preview cleanup targets before mutation; confirm only events with valid CommitmentOS ownership properties are targeted.
@@ -833,6 +862,7 @@ gate run remains (see phase2_progress "Deployment requirements").
 | 2026-08-14 | **Phase 4C deployed; automated live pre-gate CLOSED**: revision `commitmentos-00036-puj` serves 100%; 15 indexes READY; one-minute safety Scheduler returns 200. A renewed real Calendar watch bootstrapped the authoritative snapshot through one fenced full-resync publication (cursor/state revision 1, barrier clear); source-sync and reconciliation queues converged empty. Live deployment exposed and fixed four migration/provider-contract gaps with tests: timestamp-less legacy cursor freshness, handshake-only bootstrap, legacy-token full-resync selection, and sync-token-ineligible `orderBy`. Two elapsed blocks are `awaiting_check_in` at zero verified minutes; `daf9a729…` is durably `in_progress`/`overdue` with 120 remaining minutes. 147 tests green; Ruff and changed-file mypy clean. The official meeting-over-owned-block gate remains pending owner-observed insertion, warmed latency, one minimal repair, and one ignored echo. | `docs/phase4c_progress.md`; Cloud Run/Scheduler/Tasks and masked Firestore live checks; `backend/tests/integration/test_phase4a_calendar_truth.py`; `backend/tests/integration/test_phase4c_always_on_safety.py` | Project owner + build session; manual gate action pending |
 | 2026-08-14 | **Phase 4 gate CLOSED (live)**: meeting-over-owned-block run passed 17/17 verify checkpoints on revision `commitmentos-00031-rsz`; one minimal 60-minute repair via `If-Match` with stable event identity, 4/4 unaffected blocks byte-preserved, complete before/after/risk-arc explanation, echo terminally ignored, **8.293 s** warmed insert-to-repair (budget 15 s), clean log scan. Run 1 exposed a live-only policy bug — unrelated overdue `daf9a729…` made every portfolio plan infeasible and escalated the in-policy repair to `action_approval` (`repair_infeasible`), with the approval-resume path looping on the same check. Fixed: `_repair_blocking_infeasibility` escalates only on unplaced blocks, immutable conflict, or future-deadline shortfall; `immutable_conflict` recorded in the `_repair` audit; regression `test_unrelated_overdue_commitment_does_not_block_automatic_repair`; 148 tests green, Ruff + targeted mypy clean. Deviation: conflict inserted/removed via guarded Calendar-API scripts at owner request (demo video will use the UI). Pre-fix approval `19b1acfb…` retained pending as audit history (expires 08-21). | `docs/phase4_evidence/phase4_gate_run.md`; `docs/phase4c_progress.md` gate-closure record | Project owner + build session |
 | 2026-08-14 | **Phase 4A + 4B dedicated live exits CLOSED**: guarded run passed 65/65 on `commitmentos-00050-qar`. 4A: exact two-page Calendar generation, page-1 cursor/token non-promotion, real planner/executor barrier refusal, one final revision advance, planner revision/hash byte-identical to snapshot store. 4B: explicit invalid-move restore intent from snapshot etag, real Google 412 → terminal stale intent/no `action_result` → one sync → new-etag successful intent; subsequent valid owned move adopted with one explanation and zero outbox delta. Two live product defects found and fixed with regressions: guarded approval route dropped Calendar `choice`; `restore_approved_slot` emitted no action. Isolated fixture removed. Production normalized on `commitmentos-00052-did` (page 250, chunk 100, probe 0), queues RUNNING/cursor eligible, 151 tests green. | `docs/phase4_evidence/phase4ab_gate_run.md`; `docs/phase4a_progress.md`; `docs/phase4b_progress.md` | Project owner + build session |
+| 2026-08-14 | **Phase 5A local exit CLOSED**: `CompleteCommitment` + guarded route with the §4.5 terminal invariant (completion closes pending check-in requests, cancels leftover planned blocks via snapshot-etag `If-Match` intents, and removes the commitment from the demand set); production `AuthRouter` replaces the spike login (state/nonce/PKCE single-use CAS, allowlisted redirect targets, logout revocation) and the last spike modules left the live path (route inventory re-audited, §13.5); full D4 local proofs (session negative matrix, parametrized CSRF suite over every controlled mutation route, self-enumerating demo mutation matrix, durable webhook rate-limit negatives, audited cleanup command doubling as the 5B reset); §16.4 fault matrix landed in `tests/fault_injection` incl. the open D1 worker-kill/takeover row, executor death before/after the Calendar response, §9.4 create-before-record convergence, and projection-corruption blocking. **220 tests green (baseline 151), Ruff clean, targeted mypy clean; golden dry-run reaches `completed` with honest verified minutes.** Live D4 probes + golden campaign are 5B. | `docs/phase5a_progress.md`; `backend/tests/integration/test_phase5a_completion.py`, `test_phase5a_cleanup.py`; `backend/tests/contract/test_auth_contracts.py`, `test_webhook_rate_limit.py`, `test_route_contracts.py`; `tests/fault_injection/` | Build session |
 | TBD | TBD | TBD | TBD |
 
 ## Blocker log

@@ -30,7 +30,9 @@ class WorkCheckInApiRequest(RevisionedMutationRequest):
 
 
 class CompleteCommitmentApiRequest(RevisionedMutationRequest):
+    idempotency_key: str = Field(min_length=1, max_length=128)
     completed_at: datetime
+    note: str | None = Field(default=None, max_length=500)
 
 
 class PlanUndoApiRequest(StrictApiModel):

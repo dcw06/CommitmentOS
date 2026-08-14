@@ -169,6 +169,8 @@ class SeededReconciliationWorkflow:
                 observation,
                 "undo_requested",
             )
+        if observation.observation_type == ObservationType.COMPLETION_CONFIRMED:
+            return await self._handle_completion_confirmed(request, observation)
         if observation.observation_type == ObservationType.ACTION_RESULT:
             return await self._handle_action_result(request, observation)
         if observation.observation_type == ObservationType.CALENDAR_USER_MOVE_VALID:
@@ -3040,6 +3042,171 @@ class SeededReconciliationWorkflow:
     # ------------------------------------------------------------------
     # Control change and action results
     # ------------------------------------------------------------------
+
+    async def _handle_completion_confirmed(
+        self,
+        request: ReconciliationRequest,
+        observation: ObservationV1,
+    ) -> ReconciliationOutcome:
+        """Continuation for explicit completion (plan §4.5, golden audit step 17).
+
+        Pending check-in requests close under the terminal state without any
+        verified minute changing; leftover future blocks release their
+        Calendar time through guarded cancel intents; the portfolio replan
+        removes the completed commitment from the demand set. The commitment
+        itself is never mutated here — completion is already terminal.
+        """
+        now = self._clock.now()
+        commitment_id = str(observation.safe_metadata.get("commitment_id") or "")
+        outbox_ids: list[str] = []
+
+        async def _close(repositories: RepositorySet) -> tuple[str, ...]:
+            commitment = await repositories.commitments.get(commitment_id)
+            if commitment is None:
+                return ()
+            if commitment.lifecycle_status != LifecycleStatus.COMPLETED:
+                # A replayed completion observation after an explicit reopen
+                # must not re-close anything; only current truth acts.
+                return ()
+            blocks = tuple(
+                await repositories.work_blocks.list_for_commitment(commitment_id)
+            )
+            closed_check_ins: list[str] = []
+            canceled_blocks: list[str] = []
+            events_without_snapshot: list[str] = []
+            controls = None
+            for original in blocks:
+                block = original
+                if block.execution_state == WorkBlockExecutionState.ACTIVE:
+                    block = block.request_check_in(now)
+                if block.execution_state == WorkBlockExecutionState.AWAITING_CHECK_IN:
+                    updated = block.mark_missed(now)
+                    await repositories.work_blocks.save(updated, original.revision)
+                    closed_check_ins.append(updated.work_block_id)
+                    continue
+                if block.execution_state != WorkBlockExecutionState.PLANNED:
+                    continue
+                canceled = block.cancel(now)
+                await repositories.work_blocks.save(canceled, block.revision)
+                canceled_blocks.append(canceled.work_block_id)
+                snapshot = await repositories.calendar_snapshots.get(
+                    block.calendar_id, block.calendar_event_id
+                )
+                if (
+                    snapshot is None
+                    or snapshot.is_tombstone
+                    or snapshot.observed_event_etag is None
+                ):
+                    # The 4C drift detector surfaces the leftover event; the
+                    # terminal state must not depend on Calendar truth.
+                    events_without_snapshot.append(block.calendar_event_id)
+                    continue
+                if controls is None:
+                    controls = await repositories.system_controls.get(request.user_id)
+                action_key = self._action_keys.derive(
+                    commitment_id,
+                    commitment.plan_revision,
+                    CalendarActionType.CANCEL,
+                    block.work_block_id,
+                )
+                outbox_id = CanonicalEncoder.hash(["outbox:v1", action_key])
+                if await repositories.outbox.get(outbox_id) is not None:
+                    outbox_ids.append(outbox_id)
+                    continue
+                outbox = ActionOutbox(
+                    outbox_id=outbox_id,
+                    user_id=request.user_id,
+                    commitment_id=commitment_id,
+                    work_block_id=block.work_block_id,
+                    action_idempotency_key=action_key,
+                    expected_commitment_revision=commitment.revision,
+                    expected_plan_revision=commitment.plan_revision,
+                    # Completed commitments carry no current-provenance
+                    # projection by design; revision, epoch, and etag guards
+                    # still protect this cancel.
+                    expected_projection_hash="",
+                    expected_control_epoch=controls.control_epoch,
+                    mutation=CalendarMutation(
+                        action_type=CalendarActionType.CANCEL,
+                        calendar_id=block.calendar_id,
+                        calendar_event_id=block.calendar_event_id,
+                        work_block_id=block.work_block_id,
+                        desired_start=block.scheduled_start,
+                        desired_end=block.scheduled_end,
+                        expected_observed_event_etag=snapshot.observed_event_etag,
+                        private_properties={
+                            "managed_by": "commitmentos",
+                            "commitment_id": commitment_id,
+                            "work_block_id": block.work_block_id,
+                            "plan_revision": str(commitment.plan_revision),
+                        },
+                    ),
+                    dispatch_status=DispatchStatus.PENDING,
+                    execution_status=ExecutionStatus.PENDING,
+                    claim_token=None,
+                    claim_lease_expires_at=None,
+                    attempts=0,
+                    mutation_response=None,
+                    error=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                await repositories.outbox.create(outbox)
+                outbox_ids.append(outbox_id)
+            if closed_check_ins or canceled_blocks:
+                await repositories.activity.append(
+                    self._activity_factory.create(
+                        user_id=request.user_id,
+                        event_type=ActivityEventType.COMPLETION_RECORDED,
+                        trace_id=request.trace_id,
+                        actor="reconciliation",
+                        summary=(
+                            "Completion closed pending check-in requests; "
+                            "verified minutes unchanged"
+                        ),
+                        payload={
+                            "source_observation_id": observation.observation_id,
+                            "commitment_id": commitment_id,
+                            "check_in_requests_closed": closed_check_ins,
+                            "future_blocks_canceled": canceled_blocks,
+                            "cancel_outbox_ids": list(outbox_ids),
+                            "events_without_snapshot": events_without_snapshot,
+                        },
+                        created_at=now,
+                    )
+                )
+            return (
+                observation.observation_id,
+                *closed_check_ins,
+                *canceled_blocks,
+            )
+
+        durable = await self._unit_of_work.run_fenced(request.processing_fence, _close)
+        if not durable:
+            return self._outcome(request, "ignored", (), "completion_target_not_terminal")
+        for outbox_id in outbox_ids:
+            try:
+                await self._outbox_dispatcher.dispatch(outbox_id)
+            except Exception:  # noqa: BLE001 - durable outbox repairs the enqueue gap
+                pass
+        if self._portfolio_planning is None:
+            return self._outcome(request, "processed", durable, None)
+        replanned = await self._handle_portfolio_replan(
+            request, observation, "commitment_completed"
+        )
+        if replanned.status != "processed":
+            return self._outcome(
+                request,
+                "processed",
+                durable,
+                replanned.error_code or "projection_refresh_deferred",
+            )
+        return self._outcome(
+            request,
+            "processed",
+            tuple(dict.fromkeys((*durable, *replanned.durable_outcome_ids))),
+            replanned.error_code,
+        )
 
     async def _handle_portfolio_replan(
         self,
