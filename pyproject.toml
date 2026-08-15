@@ -45,7 +45,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["backend/tests", "tests/fault_injection"]
+testpaths = ["backend/tests", "tests/fault_injection", "tests/golden_path"]
 timeout = 60
 
 [tool.ruff]

@@ -1,0 +1,145 @@
+{
+  "service_url": "https://commitmentos-1025285835715.us-west1.run.app",
+  "recorded_at": "2026-08-14T15:00:34.703227+00:00",
+  "groups": [
+    "demo"
+  ],
+  "checkpoints": [
+    {
+      "label": "POST /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/demo/today seeded read available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "/demo/commitments seeded read available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "/demo/activity seeded read available",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,138 @@
+{
+  "run_tag": "20260814t161348",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: initial_plan_approval pending",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation f8066b6e39a0\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block f47ebd7928\u2026",
+      "ok": false,
+      "detail": "etb1f08b4n057r\u2026"
+    },
+    {
+      "label": "calendar event exists for block ddc20c564a\u2026",
+      "ok": false,
+      "detail": "ga76v3itd2lj57\u2026"
+    },
+    {
+      "label": "observation 852d61b9c7ca\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 0d988c8e5f6c\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 29f405cfdaa9\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation c7b960ce1c7f\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 738439afaa2a\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 9bc14920a7f6\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 2d007ede1193\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation a129e896fca1\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation f27130b9d217\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "golden commitment detected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "exactly one commitment from three thread observations",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "label": "ownership resolved as my_commitment",
+      "ok": true,
+      "detail": "my_commitment"
+    },
+    {
+      "label": "interpreted deadline is future and confident",
+      "ok": true,
+      "detail": "2026-08-17T23:00:00+00:00"
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": false,
+      "detail": "timeout 120.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: initial_plan_approval pending"
+    }
+  ]
+}

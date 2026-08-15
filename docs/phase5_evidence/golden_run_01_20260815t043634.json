@@ -1,0 +1,223 @@
+{
+  "run_tag": "20260815t043634",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: conflict repaired: target block moved",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation 2dcf743b2fc1\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 646837ae02\u2026",
+      "ok": true,
+      "detail": "ens450knkbp108\u2026"
+    },
+    {
+      "label": "calendar event exists for block 545952f862\u2026",
+      "ok": true,
+      "detail": "djntj0hjkqd43v\u2026"
+    },
+    {
+      "label": "observation 3a30c62be228\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 8a062ce83a17\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 0c262c96cc21\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 41b8ed2fd37a\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 655f0cd79952\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 48f8c28c9e23\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation c3eba9e7f93d\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 2abab418fff3\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 97946a6e7fb4\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "golden commitment detected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "exactly one commitment from three thread observations",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "label": "ownership resolved as my_commitment",
+      "ok": true,
+      "detail": "my_commitment"
+    },
+    {
+      "label": "interpreted deadline is future and confident",
+      "ok": true,
+      "detail": "2026-08-17T23:00:00+00:00"
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "golden plan committed with work blocks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "allocated minutes equal confirmed effort",
+      "ok": true,
+      "detail": "180/180"
+    },
+    {
+      "label": "block ca0f6badbc\u2026 inside envelope",
+      "ok": true,
+      "detail": "Sat 14:45-15:45"
+    },
+    {
+      "label": "block 1b7cf2024b\u2026 inside envelope",
+      "ok": true,
+      "detail": "Sat 16:00-17:00"
+    },
+    {
+      "label": "block 032de6384e\u2026 inside envelope",
+      "ok": true,
+      "detail": "Mon 12:45-13:45"
+    },
+    {
+      "label": "no interval allocated twice across the portfolio",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "label": "calendar event exists for block ca0f6badbc\u2026",
+      "ok": true,
+      "detail": "fq2clgdu1140r5\u2026"
+    },
+    {
+      "label": "calendar event exists for block 1b7cf2024b\u2026",
+      "ok": true,
+      "detail": "fo5rlc063u506r\u2026"
+    },
+    {
+      "label": "calendar event exists for block 032de6384e\u2026",
+      "ok": true,
+      "detail": "4vnks3fi1ak1fn\u2026"
+    },
+    {
+      "label": "every block carries its stable derived event ID",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "all create actions succeeded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "block ca0f6badbc\u2026 elapsed to awaiting_check_in (driver stand-in)",
+      "ok": true,
+      "detail": "rev 2"
+    },
+    {
+      "label": "check-in 60m recorded via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "identical check-in redelivery converges",
+      "ok": true,
+      "detail": "check_in_already_recorded"
+    },
+    {
+      "label": "conflict meeting inserted (recorded API convention)",
+      "ok": true,
+      "detail": "inl4b71oloocm5"
+    },
+    {
+      "label": "conflict repaired: target block moved",
+      "ok": false,
+      "detail": "timeout 120.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: conflict repaired: target block moved"
+    }
+  ]
+}

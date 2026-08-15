@@ -122,6 +122,32 @@ class GoogleCalendarWriter:
                     event=None,
                     error={"error_code": "ownership_mismatch"},
                 )
+            if existing.get("status") == "cancelled":
+                # Google reserves an event ID permanently; a cancelled owned
+                # event is a corpse, not a success. §9.4 stable identity means
+                # a create for the same work block must revive the reserved
+                # event with the desired state — never record a corpse as
+                # applied. If-Match on the just-fetched corpse etag keeps the
+                # fetch→update pair linearized; a concurrent edit surfaces as
+                # the typed 412 precondition path.
+                revive = self._event_body(mutation)
+                revive["status"] = "confirmed"
+                request = service.events().update(
+                    calendarId=mutation.calendar_id,
+                    eventId=mutation.calendar_event_id,
+                    body=revive,
+                )
+                if existing.get("etag"):
+                    request.headers["If-Match"] = existing["etag"]
+                try:
+                    event = request.execute()
+                except HttpError as error:
+                    return self._failure(error)
+                return CalendarMutationOutcome(
+                    outcome_type=CalendarMutationOutcomeType.APPLIED,
+                    event=_record(mutation.calendar_id, event),
+                    error=None,
+                )
             return CalendarMutationOutcome(
                 outcome_type=CalendarMutationOutcomeType.ALREADY_APPLIED,
                 event=_record(mutation.calendar_id, existing),

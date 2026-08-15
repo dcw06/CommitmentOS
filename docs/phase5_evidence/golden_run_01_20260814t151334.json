@@ -1,0 +1,63 @@
+{
+  "run_tag": "20260814t151334",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: observation fb29abe620b6\u2026 terminal",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation d9e46ea8b59a\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 72ac0cddfb\u2026",
+      "ok": true,
+      "detail": "4a9otngjv48325\u2026"
+    },
+    {
+      "label": "calendar event exists for block 2686696bfe\u2026",
+      "ok": true,
+      "detail": "43vs7g5op7l7f8\u2026"
+    },
+    {
+      "label": "observation fb29abe620b6\u2026 terminal",
+      "ok": false,
+      "detail": "timeout 120.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: observation fb29abe620b6\u2026 terminal"
+    }
+  ]
+}

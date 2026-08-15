@@ -1,0 +1,18 @@
+{
+  "run_tag": "20260814t150716",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "InvalidArgument: 400 HttpRequest.url must start with 'https://' for request with HttpRequest.authorization_header",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "InvalidArgument: 400 HttpRequest.url must start with 'https://' for request with HttpRequest.authorization_header"
+    }
+  ]
+}

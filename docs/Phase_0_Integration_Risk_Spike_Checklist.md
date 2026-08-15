@@ -779,12 +779,12 @@ Local proof: `backend/tests/contract/test_auth_contracts.py` (16 tests) over
 the production `AuthRouter`, which replaced the spike login as the session
 issuer (no spike module remains mounted).
 
-- [ ] Start login only through an allowlisted redirect target.
-- [ ] Reject missing, mismatched, expired, and replayed state.
-- [ ] Reject a mismatched nonce.
-- [ ] Confirm callback replay cannot create a second session.
-- [ ] Confirm logout revokes the current session.
-- [ ] Enforce session expiry and revocation.
+- [x] Start login only through an allowlisted redirect target. — live probes: three non-allowlisted targets rejected HTTP 400; `/app` target 302s to Google (`security_probes_20260814t160344.json`)
+- [x] Reject missing, mismatched, expired, and replayed state. — live: missing state 400; unknown/replayed state 403
+- [x] Reject a mismatched nonce. — local contract suite; the live callback path enforces the same single-use CAS transaction the probes exercised
+- [x] Confirm callback replay cannot create a second session. — live: replayed state 403 with no session
+- [x] Confirm logout revokes the current session. — live: logout without CSRF 403 and session survives; with CSRF the session is revoked and rejected afterward
+- [x] Enforce session expiry and revocation. — live: revoked session rejected; unauthenticated read 401
 
 ### Full CSRF suite
 
@@ -794,7 +794,7 @@ controlled mutation route including the new completion route; byte-identical
 durable state and zero dispatches on every rejection; auth resolves before
 body validation.
 
-- [ ] Confirm every controlled mutation route rejects missing and invalid CSRF tokens with zero side effects.
+- [x] Confirm every controlled mutation route rejects missing and invalid CSRF tokens with zero side effects. — live probes on all five controlled mutation routes (approvals resolve, controls change, check-in, undo, complete): missing session 401, missing CSRF 403, invalid CSRF 403 (`security_probes_20260814t160344.json`)
 
 ### Webhook hardening
 
@@ -802,8 +802,8 @@ Local proof: `backend/tests/contract/test_webhook_rate_limit.py` — 429 over
 limit with zero side effects, durable across a process restart, window
 recovery, and invalid probes unable to exhaust the valid-signal budget.
 
-- [ ] Enforce the durable per-channel rate limit.
-- [ ] Test a request exceeding the valid-signal rate limit and confirm zero side effects.
+- [x] Enforce the durable per-channel rate limit. — live on every webhook delivery through the 2026-08-15 golden campaign (the limiter sits on the validated live path); restart durability proven in `backend/tests/contract/test_webhook_rate_limit.py`
+- [ ] Test a request exceeding the valid-signal rate limit and confirm zero side effects. — documented owner-run step (deliberately excluded from automated probes to avoid tripping the durable limiter outside a gate window); unit + restart coverage in `test_webhook_rate_limit.py`
 
 ### Full demo mutation matrix
 
@@ -812,11 +812,11 @@ Local proof: `TestFullDemoMutationMatrix` in
 every mounted mutation method/path from the live route table; the demo
 surface is a separate static read model with no Firestore/credential path.
 
-- [ ] Confirm the demo client is separate from the live API client.
-- [ ] Attempt every production mutation method/path under `/demo`.
-- [ ] Confirm every demo mutation attempt is rejected.
-- [ ] Confirm rejected demo mutations cause zero Firestore writes, zero task dispatches, and zero OAuth, Gmail, or Calendar calls.
-- [ ] Confirm seeded mode exposes no live mutation controls.
+- [x] Confirm the demo client is separate from the live API client. — structural separation asserted in the local matrix; live demo reads serve only seeded data
+- [x] Attempt every production mutation method/path under `/demo`. — live: POST/PUT/PATCH/DELETE across every production mutation path (`security_probes_20260814t160344.json`)
+- [x] Confirm every demo mutation attempt is rejected. — live: 403 on every attempt
+- [x] Confirm rejected demo mutations cause zero Firestore writes, zero task dispatches, and zero OAuth, Gmail, or Calendar calls. — zero-side-effect assertions in the probe run; the demo read model has no Firestore/credential path by construction
+- [x] Confirm seeded mode exposes no live mutation controls. — live seeded reads verified
 
 ### Audited controlled cleanup
 
@@ -825,10 +825,10 @@ Local proof: `backend/tests/integration/test_phase5a_cleanup.py` over
 (preview → typed confirmation phrase → drift-guarded execute; snapshot-etag
 `If-Match` cancels; audit-timeline record; 5B's between-runs reset).
 
-- [ ] Complete authenticated developer cleanup as a documented command.
-- [ ] Preview cleanup targets before mutation; confirm only events with valid CommitmentOS ownership properties are targeted.
-- [ ] Confirm unrelated Calendar events remain unchanged.
-- [ ] Confirm cleanup activity is recorded in the audit timeline.
+- [x] Complete authenticated developer cleanup as a documented command. — executed live ~12 times as the golden campaign's between-runs reset (`scripts/reset_controlled_account.py` machinery via the driver; preview → typed phrase → drift-guarded execute, incl. two live drift-guard aborts that correctly refused to run on changed state)
+- [x] Preview cleanup targets before mutation; confirm only events with valid CommitmentOS ownership properties are targeted. — live: only recorded app-owned work-block events canceled each reset
+- [x] Confirm unrelated Calendar events remain unchanged. — live: the three campaign busy fixtures survived every reset unchanged
+- [x] Confirm cleanup activity is recorded in the audit timeline. — `CONTROLLED_CLEANUP_COMPLETED` activity per reset
 
 ---
 
@@ -863,6 +863,7 @@ Local proof: `backend/tests/integration/test_phase5a_cleanup.py` over
 | 2026-08-14 | **Phase 4 gate CLOSED (live)**: meeting-over-owned-block run passed 17/17 verify checkpoints on revision `commitmentos-00031-rsz`; one minimal 60-minute repair via `If-Match` with stable event identity, 4/4 unaffected blocks byte-preserved, complete before/after/risk-arc explanation, echo terminally ignored, **8.293 s** warmed insert-to-repair (budget 15 s), clean log scan. Run 1 exposed a live-only policy bug — unrelated overdue `daf9a729…` made every portfolio plan infeasible and escalated the in-policy repair to `action_approval` (`repair_infeasible`), with the approval-resume path looping on the same check. Fixed: `_repair_blocking_infeasibility` escalates only on unplaced blocks, immutable conflict, or future-deadline shortfall; `immutable_conflict` recorded in the `_repair` audit; regression `test_unrelated_overdue_commitment_does_not_block_automatic_repair`; 148 tests green, Ruff + targeted mypy clean. Deviation: conflict inserted/removed via guarded Calendar-API scripts at owner request (demo video will use the UI). Pre-fix approval `19b1acfb…` retained pending as audit history (expires 08-21). | `docs/phase4_evidence/phase4_gate_run.md`; `docs/phase4c_progress.md` gate-closure record | Project owner + build session |
 | 2026-08-14 | **Phase 4A + 4B dedicated live exits CLOSED**: guarded run passed 65/65 on `commitmentos-00050-qar`. 4A: exact two-page Calendar generation, page-1 cursor/token non-promotion, real planner/executor barrier refusal, one final revision advance, planner revision/hash byte-identical to snapshot store. 4B: explicit invalid-move restore intent from snapshot etag, real Google 412 → terminal stale intent/no `action_result` → one sync → new-etag successful intent; subsequent valid owned move adopted with one explanation and zero outbox delta. Two live product defects found and fixed with regressions: guarded approval route dropped Calendar `choice`; `restore_approved_slot` emitted no action. Isolated fixture removed. Production normalized on `commitmentos-00052-did` (page 250, chunk 100, probe 0), queues RUNNING/cursor eligible, 151 tests green. | `docs/phase4_evidence/phase4ab_gate_run.md`; `docs/phase4a_progress.md`; `docs/phase4b_progress.md` | Project owner + build session |
 | 2026-08-14 | **Phase 5A local exit CLOSED**: `CompleteCommitment` + guarded route with the §4.5 terminal invariant (completion closes pending check-in requests, cancels leftover planned blocks via snapshot-etag `If-Match` intents, and removes the commitment from the demand set); production `AuthRouter` replaces the spike login (state/nonce/PKCE single-use CAS, allowlisted redirect targets, logout revocation) and the last spike modules left the live path (route inventory re-audited, §13.5); full D4 local proofs (session negative matrix, parametrized CSRF suite over every controlled mutation route, self-enumerating demo mutation matrix, durable webhook rate-limit negatives, audited cleanup command doubling as the 5B reset); §16.4 fault matrix landed in `tests/fault_injection` incl. the open D1 worker-kill/takeover row, executor death before/after the Calendar response, §9.4 create-before-record convergence, and projection-corruption blocking. **220 tests green (baseline 151), Ruff clean, targeted mypy clean; golden dry-run reaches `completed` with honest verified minutes.** Live D4 probes + golden campaign are 5B. | `docs/phase5a_progress.md`; `backend/tests/integration/test_phase5a_completion.py`, `test_phase5a_cleanup.py`; `backend/tests/contract/test_auth_contracts.py`, `test_webhook_rate_limit.py`, `test_route_contracts.py`; `tests/fault_injection/` | Build session |
+| 2026-08-15 | **Phase 5B campaign complete; Phase 5 gate at owner sign-off**: TEN consecutive passing golden runs on revision `commitmentos-00042-fcj` (thread mode, live Gemini per run; 61/61 checkpoints each; conflict-to-repair 7.2–10.2 s, mean 9.1 s, inside the 15 s warmed budget on scale-to-zero; honest 120/180 verified minutes; frozen 18-step audit order; full replay byte-identical every run). D4 rows flipped with live evidence (`security_probes_20260814t160344.json` all-green); rate-limit exceedance remains the documented owner-run step. Campaign surfaced and same-day-fixed one product defect — executor adopted a cancelled corpse event as success; `insert_or_adopt_owned` now revives owned corpses via `events.update` + `If-Match` (3 regression tests; fake calendar aligned to Google's ID-reservation semantics; suite 224 green) — plus four environment/harness findings (watch-channel burst throttling → settle+probe discipline; Cloud Tasks 24 h name retention vs deterministic IDs → direct OIDC delivery through the replay path; stale Phase 3 busy fixtures forcing a correct >24 h policy escalation → fixtures removed; two driver races → poll/retry). One reset drift-abort split the campaign into runs 1–2 + 3–10 with no failed run (owner adjudication note in the summary). Full record: `docs/phase5_evidence/phase5_gate_summary.md` | Ten `golden_run_*_20260815t0*.json` files + `phase5_gate_summary.md` + `security_probes_20260814t160344.json` | Build session; owner sign-off + rate-limit step pending |
 | TBD | TBD | TBD | TBD |
 
 ## Blocker log

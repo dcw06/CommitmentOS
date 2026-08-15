@@ -1,0 +1,98 @@
+{
+  "run_tag": "20260814t153025",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: observation 4a61e0888319\u2026 terminal",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation 2a84dc99a006\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block eac9e70030\u2026",
+      "ok": true,
+      "detail": "ubq09m1jr3osg5\u2026"
+    },
+    {
+      "label": "calendar event exists for block ab7e3a424c\u2026",
+      "ok": true,
+      "detail": "2osplpqboqplec\u2026"
+    },
+    {
+      "label": "observation 0b19a53d057b\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 8cc5ece7f6f6\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 98a504ff3ae8\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 0289c63d8f86\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 373579e6cbea\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 987804824167\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 21519c0cd831\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 4a61e0888319\u2026 terminal",
+      "ok": false,
+      "detail": "timeout 120.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: observation 4a61e0888319\u2026 terminal"
+    }
+  ]
+}

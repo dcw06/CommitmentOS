@@ -1,0 +1,40 @@
+{
+  "service_url": "https://commitmentos-1025285835715.us-west1.run.app",
+  "recorded_at": "2026-08-14T16:02:28.374109+00:00",
+  "groups": [
+    "oidc"
+  ],
+  "checkpoints": [
+    {
+      "label": "pubsub route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "pubsub route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "tasks route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "tasks route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "scheduler route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "scheduler route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    }
+  ],
+  "passed": true
+}

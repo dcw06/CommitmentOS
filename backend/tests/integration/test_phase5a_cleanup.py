@@ -112,7 +112,9 @@ class TestCleanupExecute:
         assert result.executed
         assert result.events_canceled == len(owned_keys)
         for key in owned_keys:
-            assert key not in app.calendar.events
+            # Google reserves a cancelled event's ID; the fake mirrors that
+            # by keeping a retrievable cancelled corpse.
+            assert app.calendar.events[key]["status"] == "cancelled"
         # Unrelated Calendar events remain byte-identical.
         assert app.calendar.events[UNRELATED_EVENT_KEY] == unrelated_before
 

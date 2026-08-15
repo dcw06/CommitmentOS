@@ -1,0 +1,23 @@
+{
+  "run_tag": "20260814t153848",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: observation 90e8e9808dc9\u2026 terminal",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation 90e8e9808dc9\u2026 terminal",
+      "ok": false,
+      "detail": "timeout 90.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: observation 90e8e9808dc9\u2026 terminal"
+    }
+  ]
+}

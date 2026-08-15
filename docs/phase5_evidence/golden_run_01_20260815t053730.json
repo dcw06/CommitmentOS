@@ -1,0 +1,203 @@
+{
+  "run_tag": "20260815t053730",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: calendar settle",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation bcbde368e8e3\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 063f9c8021\u2026",
+      "ok": true,
+      "detail": "0jov3fu8n2c38a\u2026"
+    },
+    {
+      "label": "calendar event exists for block adf3a85e14\u2026",
+      "ok": true,
+      "detail": "5c60cebksfseh6\u2026"
+    },
+    {
+      "label": "observation e1783487f923\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 589588ea137a\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 914338c50bc9\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation e72ba79ccd29\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation a55131e314b3\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 9db594de8d6e\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation bcaf2a7b53cc\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation e45731748278\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation fe63f3b27d8a\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "golden commitment detected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "exactly one commitment from three thread observations",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "label": "ownership resolved as my_commitment",
+      "ok": true,
+      "detail": "my_commitment"
+    },
+    {
+      "label": "interpreted deadline is future and confident",
+      "ok": true,
+      "detail": "2026-08-17T23:00:00+00:00"
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "golden plan committed with work blocks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "allocated minutes equal confirmed effort",
+      "ok": true,
+      "detail": "180/180"
+    },
+    {
+      "label": "block ca0f6badbc\u2026 inside envelope",
+      "ok": true,
+      "detail": "Sat 14:45-15:45"
+    },
+    {
+      "label": "block 1b7cf2024b\u2026 inside envelope",
+      "ok": true,
+      "detail": "Sat 16:00-17:00"
+    },
+    {
+      "label": "block 032de6384e\u2026 inside envelope",
+      "ok": true,
+      "detail": "Mon 12:45-13:45"
+    },
+    {
+      "label": "no interval allocated twice across the portfolio",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "label": "calendar event exists for block ca0f6badbc\u2026",
+      "ok": false,
+      "detail": "fq2clgdu1140r5\u2026"
+    },
+    {
+      "label": "calendar event exists for block 1b7cf2024b\u2026",
+      "ok": false,
+      "detail": "fo5rlc063u506r\u2026"
+    },
+    {
+      "label": "calendar event exists for block 032de6384e\u2026",
+      "ok": false,
+      "detail": "4vnks3fi1ak1fn\u2026"
+    },
+    {
+      "label": "every block carries its stable derived event ID",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "all create actions succeeded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar channel settled before the conflict leg",
+      "ok": false,
+      "detail": "settle timeout"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: calendar settle"
+    }
+  ]
+}

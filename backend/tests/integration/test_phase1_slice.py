@@ -84,7 +84,7 @@ class TestSeededVerticalSlice:
         # The executor performs the mutations and records terminal results.
         results = await app.run_calendar_action_tasks()
         assert all(result.status == CommandStatus.COMPLETED for result in results)
-        assert len(app.calendar.events) == 3
+        assert len(app.calendar.live_events()) == 3
         assert all(row["execution_status"] == "succeeded" for row in outbox_rows.values())
 
         # Stable identity: every Calendar event ID derives from its block.
@@ -119,7 +119,7 @@ class TestSeededVerticalSlice:
         results = await app.run_calendar_action_tasks()
         assert all(result.status == CommandStatus.NO_OP for result in results)
         assert app.calendar.mutation_log == mutations_before
-        assert len(app.calendar.events) == 3
+        assert len(app.calendar.live_events()) == 3
 
     async def test_replayed_seeded_observation_creates_one_commitment(
         self, app: Phase1App
@@ -157,7 +157,7 @@ class TestExecutionControls:
             app._calendar_action_cursor = 0
             results = await app.run_calendar_action_tasks()
             assert all(r.status == CommandStatus.HELD for r in results)
-        assert len(app.calendar.events) == 0
+        assert len(app.calendar.live_events()) == 0
         assert app.calendar.mutation_log == []
         held = [
             row
@@ -168,7 +168,7 @@ class TestExecutionControls:
 
         # The pause observation itself reconciles without releasing anything.
         await app.run_reconciliation_tasks()
-        assert len(app.calendar.events) == 0
+        assert len(app.calendar.live_events()) == 0
 
         # Resume: revalidation supersedes held intent and reissues it with the
         # new control epoch; only then do mutations execute.
@@ -190,7 +190,7 @@ class TestExecutionControls:
         )
         assert statuses.count(ExecutionStatus.SUPERSEDED.value) == 3
         assert statuses.count(ExecutionStatus.SUCCEEDED.value) == 3
-        assert len(app.calendar.events) == 3
+        assert len(app.calendar.live_events()) == 3
         replacement_epochs = {
             row["expected_control_epoch"]
             for row in app.store["action_outbox"].values()
@@ -232,7 +232,7 @@ class TestExecutionControls:
         ]
         assert len(held) == 3
         assert app.task_dispatcher.calendar_action_tasks == []
-        assert len(app.calendar.events) == 0
+        assert len(app.calendar.live_events()) == 0
 
         await app.change_control.execute(
             app.actor(),
@@ -245,7 +245,7 @@ class TestExecutionControls:
             trace_id="trace-resume",
         )
         await app.drain()
-        assert len(app.calendar.events) == 3
+        assert len(app.calendar.live_events()) == 3
         succeeded = [
             row
             for row in app.store["action_outbox"].values()

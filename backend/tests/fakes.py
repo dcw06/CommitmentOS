@@ -269,6 +269,15 @@ class FakeCalendar:
         self._etag_counter = 0
         self.mutation_log: list[tuple[str, str]] = []
 
+    def live_events(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """Events excluding cancelled corpses (Google reserves the ID of a
+        cancelled event; it stays retrievable rather than vanishing)."""
+        return {
+            key: event
+            for key, event in self.events.items()
+            if event.get("status") != "cancelled"
+        }
+
     def next_etag(self) -> str:
         self._etag_counter += 1
         return f'"etag-{self._etag_counter}"'
@@ -433,6 +442,21 @@ class FakeCalendarWriter:
                     event=None,
                     error={"error_code": "ownership_mismatch"},
                 )
+            if existing.get("status") == "cancelled":
+                # Mirror the real writer: a cancelled owned event is a
+                # reserved corpse; a create for the same work block revives
+                # it with the desired state instead of blessing the corpse.
+                existing["status"] = "confirmed"
+                existing["start"] = mutation.desired_start
+                existing["end"] = mutation.desired_end
+                existing["private_properties"] = dict(mutation.private_properties)
+                existing["etag"] = self._calendar.next_etag()
+                self._calendar.mutation_log.append(("revive", mutation.calendar_event_id))
+                return CalendarMutationOutcome(
+                    outcome_type=CalendarMutationOutcomeType.APPLIED,
+                    event=self._calendar.record(*key),
+                    error=None,
+                )
             self._calendar.mutation_log.append(("adopt", mutation.calendar_event_id))
             return CalendarMutationOutcome(
                 outcome_type=CalendarMutationOutcomeType.ALREADY_APPLIED,
@@ -499,7 +523,10 @@ class FakeCalendarWriter:
                 event=None,
                 error={"error_code": "failedPrecondition", "http_status": "412"},
             )
-        del self._calendar.events[key]
+        # Google reserves a cancelled event's ID: keep the corpse retrievable
+        # (status "cancelled") instead of deleting the entry outright.
+        existing["status"] = "cancelled"
+        existing["etag"] = self._calendar.next_etag()
         self._calendar.mutation_log.append(("cancel", mutation.calendar_event_id))
         return CalendarMutationOutcome(
             outcome_type=CalendarMutationOutcomeType.APPLIED,

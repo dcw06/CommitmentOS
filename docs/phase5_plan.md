@@ -99,6 +99,19 @@ local golden dry-run reaching `completed` through the real workflow.
 
 ## Chunk 5B — Golden-run campaign, live evidence, and the Phase 5 gate
 
+**CAMPAIGN COMPLETE 2026-08-15 — ten consecutive passing golden runs on
+revision `commitmentos-00042-fcj` (thread mode, live Gemini per run);
+conflict-to-repair 7.2–10.2 s (mean 9.1 s, warmed budget 15 s) on
+scale-to-zero; 61/61 checkpoints, honest verified minutes, frozen audit
+order, and byte-identical replay every run. All §16.5 measured results in
+`docs/phase5_evidence/` (per-run JSON + `phase5_gate_summary.md`). D4
+checklist rows flipped with live probe evidence. The gate closes at owner
+sign-off: accept the runs-2/3 interruption note (a reset drift-abort with
+no failed run), run the documented webhook rate-limit exceedance step,
+and sign the decision log. One product defect was found and fixed
+same-day with regressions (cancelled-corpse adoption → revival; see the
+gate summary's findings list).**
+
 Pure operations against the deployed service. Product code changes only as
 fixes for findings, each with a regression test.
 

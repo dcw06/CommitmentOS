@@ -369,7 +369,7 @@ class TestCompletionContinuation:
                 row["mutation"]["calendar_id"],
                 row["mutation"]["calendar_event_id"],
             )
-            assert key not in app.calendar.events
+            assert key not in app.calendar.live_events()
             assert ("cancel", row["mutation"]["calendar_event_id"]) in (
                 app.calendar.mutation_log
             )
