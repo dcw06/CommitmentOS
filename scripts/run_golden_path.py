@@ -1410,7 +1410,7 @@ async def cmd_preflight(args: argparse.Namespace) -> int:
             login_probe.status_code == 400,
             f"HTTP {login_probe.status_code}",
         )
-        demo_probe = await client.get(f"{runner.service_url}/demo/commitments")
+        demo_probe = await client.get(f"{runner.service_url}/demo/api/commitments")
         checkpoint(
             "5A demo surface deployed", demo_probe.status_code == 200, str(demo_probe.status_code)
         )

@@ -333,7 +333,11 @@ class SecurityDriver:
                         response.status_code == 403,
                         f"HTTP {response.status_code}",
                     )
-            for path in ("/demo/today", "/demo/commitments", "/demo/activity"):
+            for path in (
+                "/demo/api/today",
+                "/demo/api/commitments",
+                "/demo/api/activity",
+            ):
                 read = await client.get(f"{self.service_url}{path}")
                 check(f"{path} seeded read available", read.status_code == 200, "")
 

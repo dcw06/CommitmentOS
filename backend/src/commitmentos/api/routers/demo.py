@@ -22,15 +22,18 @@ class DemoRouter:
         router = APIRouter(tags=["demo"])
         handler = self
 
-        @router.get("/demo/today")
+        # Data endpoints live under /demo/api so they can never shadow the
+        # SPA page URLs (/demo/commitments, /demo/activity) that the dashboard
+        # catch-all serves for hard refreshes and shared deep links.
+        @router.get("/demo/api/today")
         async def today() -> Response:
             return await handler.today()
 
-        @router.get("/demo/commitments")
+        @router.get("/demo/api/commitments")
         async def commitments() -> Response:
             return await handler.commitments()
 
-        @router.get("/demo/activity")
+        @router.get("/demo/api/activity")
         async def activity() -> Response:
             return await handler.activity()
 

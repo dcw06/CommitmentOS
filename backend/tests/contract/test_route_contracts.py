@@ -705,11 +705,11 @@ class TestFullDemoMutationMatrix:
         self, api: TestClient, app: Phase1App
     ) -> None:
         before = copy.deepcopy(app.store)
-        today = api.get("/demo/today")
+        today = api.get("/demo/api/today")
         assert today.status_code == 200
         assert today.json()["seeded"] is True
-        commitments = api.get("/demo/commitments")
-        activity = api.get("/demo/activity")
+        commitments = api.get("/demo/api/commitments")
+        activity = api.get("/demo/api/activity")
         assert commitments.status_code == 200
         assert activity.status_code == 200
         for response in (today, commitments, activity):

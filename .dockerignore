@@ -11,7 +11,8 @@
 .ruff_cache/
 
 # Not part of the backend image
-frontend/
+frontend/node_modules/
+frontend/dist/
 docs/
 Plan_Final/
 Planning Stage/

@@ -128,6 +128,9 @@ class CommitmentsRouter:
                     "execution_state": block.execution_state.value,
                     "verified_minutes": block.verified_minutes,
                     "plan_revision": block.plan_revision,
+                    # The guarded check-in route requires the block's expected
+                    # revision; the dashboard reads it from here.
+                    "revision": block.revision,
                 }
                 for block in detail.work_blocks
             ],

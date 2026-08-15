@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from commitmentos.api.middleware.error_mapping import ErrorMappingMiddleware
 from commitmentos.api.middleware.request_context import RequestContextMiddleware
@@ -105,8 +109,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # evidence record and the local watch-management scripts only.
     app.include_router(container.auth_router(identity).build())
     app.include_router(container.demo_router().build())
+    _mount_dashboard(app)
     _assert_no_duplicate_routes(app)
     return app
+
+
+def _mount_dashboard(app: FastAPI) -> None:
+    """Serve the compiled React dashboard when a build exists.
+
+    One bundle renders in two modes: /app (live data behind the session at
+    the API layer) and /demo (the seeded read-only judge mode — its data
+    routes are namespaced under /demo/api and registered by DemoRouter before
+    this catch-all, so page URLs like /demo/commitments fall through to the
+    SPA on hard refresh). Assets resolve absolutely under /app/assets in both
+    modes.
+    When no build exists (test runs, backend-only development) nothing is
+    registered and the API surface is unchanged.
+    """
+    dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+    index = dist / "index.html"
+    if not index.is_file():
+        return
+    app.mount("/app/assets", StaticFiles(directory=dist / "assets"), name="app-assets")
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect() -> RedirectResponse:
+        return RedirectResponse("/app")
+
+    @app.get("/app", include_in_schema=False)
+    @app.get("/app/{rest:path}", include_in_schema=False)
+    async def app_spa(rest: str = "") -> FileResponse:
+        del rest
+        return FileResponse(index)
+
+    @app.get("/demo", include_in_schema=False)
+    @app.get("/demo/{rest:path}", include_in_schema=False)
+    async def demo_spa(rest: str = "") -> FileResponse:
+        del rest
+        return FileResponse(index)
 
 
 def _assert_no_duplicate_routes(app: FastAPI) -> None:

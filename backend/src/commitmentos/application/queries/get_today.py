@@ -67,6 +67,7 @@ class GetToday:
                     "verified_minutes": block.verified_minutes,
                     "duration_minutes": block.duration_minutes,
                     "plan_revision": block.plan_revision,
+                    "revision": block.revision,
                 }
                 for block in blocks
             ),
