@@ -18,6 +18,7 @@
       .messaging{fill:#ecfdf5;stroke:#10b981}
       .run{fill:#f5f3ff;stroke:#8b5cf6}
       .store{fill:#fff7ed;stroke:#f97316}
+      .secrets{fill:#fefce8;stroke:#ca8a04}
       .actor{fill:#ffffff;stroke:#64748b}
       .label{font:700 16px Arial,sans-serif;fill:#111827;text-anchor:middle}
       .small{font:400 13px Arial,sans-serif;fill:#475569;text-anchor:middle}
@@ -45,7 +46,8 @@
   <circle cx="1132" cy="40" r="7" fill="#4285f4"/><text x="1147" y="45" class="legend">Google APIs</text>
   <circle cx="1310" cy="40" r="7" fill="#10b981"/><text x="1325" y="45" class="legend">managed messaging</text>
   <circle cx="1132" cy="70" r="7" fill="#8b5cf6"/><text x="1147" y="75" class="legend">Cloud Run (one service)</text>
-  <circle cx="1370" cy="70" r="7" fill="#f97316"/><text x="1385" y="75" class="legend">Firestore</text>
+  <circle cx="1310" cy="70" r="7" fill="#f97316"/><text x="1325" y="75" class="legend">Firestore</text>
+  <circle cx="1408" cy="70" r="7" fill="#ca8a04"/><text x="1423" y="75" class="legend">Secret Manager</text>
 
   <text x="50" y="126" class="section">INGESTION — BOTH SIGNALS CONVERGE ON THE SAME DURABLE SYNCHRONIZATION PATH</text>
 
@@ -79,7 +81,7 @@
   <rect x="570" y="315" width="240" height="92" class="box run"/>
   <text x="690" y="334" class="tag">CLOUD RUN · PUBLIC INGRESS</text>
   <text x="690" y="364" class="label">Calendar Webhook</text>
-  <text x="690" y="387" class="small">validated signal; fetch only</text>
+  <text x="690" y="387" class="small">channel token · rate limit · fetch only</text>
 
   <!-- Shared synchronization path -->
   <rect x="885" y="224" width="255" height="116" class="box messaging"/>
@@ -121,8 +123,8 @@
   <rect x="295" y="505" width="220" height="125" class="box run"/>
   <text x="405" y="525" class="tag">CLOUD RUN · AUTHENTICATED APP</text>
   <text x="405" y="556" class="label">React Dashboard</text>
-  <text x="405" y="580" class="small">authenticated app route</text>
-  <text x="405" y="603" class="small">approvals + pause controls</text>
+  <text x="405" y="580" class="small">Google OAuth session + CSRF</text>
+  <text x="405" y="603" class="small">approvals · check-ins · completion</text>
 
   <rect x="570" y="505" width="240" height="125" class="box store"/>
   <text x="690" y="525" class="tag">FIRESTORE</text>
@@ -186,7 +188,24 @@
   <circle cx="957" cy="567" r="13" class="step"/><text x="957" y="568" class="step-text">6</text>
 
   <!-- Action path and operations -->
-  <text x="50" y="845" class="section">POLICY-CONTROLLED ACTION LOOP</text>
+  <text x="50" y="845" class="section">PLATFORM TRUST SURFACES</text>
+  <text x="570" y="845" class="section">POLICY-CONTROLLED ACTION LOOP</text>
+
+  <!-- Secret Manager: all four credentials live here; nothing in env or code -->
+  <rect x="50" y="880" width="240" height="116" class="box secrets"/>
+  <text x="170" y="900" class="tag">MANAGED SECRETS</text>
+  <text x="170" y="931" class="label">Secret Manager</text>
+  <text x="170" y="954" class="small">OAuth client · refresh token</text>
+  <text x="170" y="977" class="small">Gemini key · webhook channel token</text>
+  <text x="170" y="1018" class="edge-label">read at use by the runtime service account;</text>
+  <text x="170" y="1035" class="edge-label">never in env vars, code, or logs</text>
+
+  <!-- Seeded judge mode: deliberately edge-free — no path to live state exists -->
+  <rect x="315" y="880" width="200" height="116" class="box run"/>
+  <text x="415" y="900" class="tag">CLOUD RUN · PUBLIC READ-ONLY</text>
+  <text x="415" y="931" class="label">Seeded Judge Mode</text>
+  <text x="415" y="954" class="small">/demo · static seeded reads</text>
+  <text x="415" y="977" class="small">no Firestore or credential path</text>
 
   <rect x="570" y="880" width="240" height="116" class="box run"/>
   <text x="690" y="900" class="tag">CLOUD RUN · AUTHENTICATED WORKER</text>
