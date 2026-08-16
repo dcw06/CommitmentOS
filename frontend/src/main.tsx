@@ -1,3 +1,5 @@
+import "./styles.css";
+
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -12,7 +14,6 @@ import { BASENAME, bootstrapSession, DEMO_MODE, logout } from "./api";
 import { ActivityPage } from "./views/activity";
 import { CommitmentDetailPage, CommitmentsPage } from "./views/commitments";
 import { TodayPage } from "./views/today";
-import "./styles.css";
 
 function Shell() {
   const [ready, setReady] = useState(DEMO_MODE);
@@ -35,7 +36,7 @@ function Shell() {
       {DEMO_MODE && (
         <div className="demo-banner">
           <strong>Seeded judge mode</strong> — read-only demonstration data derived
-          from the frozen golden scenario; no live mailbox content and no mutation
+          from a fixed scenario; no live mailbox content and no mutation
           capability.
         </div>
       )}

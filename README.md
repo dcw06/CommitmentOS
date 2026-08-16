@@ -85,7 +85,7 @@ and action results continue through new durable observations.
 ## Judge mode
 
 The hosted service exposes **`/demo`** — the full dashboard rendering seeded
-data derived from the frozen golden scenario. It is read-only by
+data derived from a fixed demonstration scenario. It is read-only by
 construction: the demo read model has no Firestore, credential, or Google
 API access path, and every mutation method under `/demo` is rejected before
 any handler logic. No login required.
@@ -187,7 +187,7 @@ service.
 ## OAuth: publishing mode, scopes, limitations
 
 - **Mode:** External / In production / **unverified personal use** — chosen
-  after a Phase 0 spike proved authorization, refresh, watch renewal,
+  after an up-front integration spike proved authorization, refresh, watch renewal,
   revocation, and allowlisting end to end. Refresh tokens do not carry the
   Testing-mode 7-day expiry; the unverified-app warning is acknowledged for
   the single controlled account. This is explicitly **not** a claim of
@@ -204,7 +204,7 @@ service.
 
 ## Evidence and measured results
 
-- **Golden campaign (Phase 5 gate):** ten consecutive passing runs of the
+- **End-to-end campaign:** ten consecutive passing runs of the
   full scenario against the deployed service — live Gemini interpretation
   each run, 61/61 checkpoints, conflict-to-repair 7.2–10.2 s (mean 9.1 s),
   honest verified minutes, byte-identical replay of every observation and
@@ -238,7 +238,7 @@ service.
 
 ## Known limitations
 
-- Single controlled user and calendar by design (P0); multi-user OAuth
+- Single controlled user and calendar by design for this release; multi-user OAuth
   onboarding, token vaulting, and verification are out of scope.
 - Sent-email completion inference is deliberately excluded — completion is
   an explicit user act.

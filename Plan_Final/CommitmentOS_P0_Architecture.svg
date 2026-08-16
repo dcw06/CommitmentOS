@@ -44,8 +44,8 @@
 
   <rect x="1110" y="17" width="440" height="78" class="note"/>
   <circle cx="1132" cy="40" r="7" fill="#4285f4"/><text x="1147" y="45" class="legend">Google APIs</text>
-  <circle cx="1310" cy="40" r="7" fill="#10b981"/><text x="1325" y="45" class="legend">managed messaging</text>
-  <circle cx="1132" cy="70" r="7" fill="#8b5cf6"/><text x="1147" y="75" class="legend">Cloud Run (one service)</text>
+  <circle cx="1310" cy="40" r="7" fill="#10b981"/><text x="1325" y="45" class="legend">Managed Messaging</text>
+  <circle cx="1132" cy="70" r="7" fill="#8b5cf6"/><text x="1147" y="75" class="legend">Cloud Run (One Service)</text>
   <circle cx="1310" cy="70" r="7" fill="#f97316"/><text x="1325" y="75" class="legend">Firestore</text>
   <circle cx="1408" cy="70" r="7" fill="#ca8a04"/><text x="1423" y="75" class="legend">Secret Manager</text>
 
@@ -55,7 +55,7 @@
   <rect x="50" y="155" width="190" height="92" class="box api"/>
   <text x="145" y="174" class="tag">GOOGLE API</text>
   <text x="145" y="204" class="label">Gmail</text>
-  <text x="145" y="227" class="small">mailbox history changes</text>
+  <text x="145" y="227" class="small">Mailbox history changes</text>
 
   <rect x="295" y="155" width="220" height="92" class="box messaging"/>
   <text x="405" y="174" class="tag">MANAGED MESSAGING</text>
@@ -71,7 +71,7 @@
   <rect x="50" y="315" width="190" height="92" class="box api"/>
   <text x="145" y="334" class="tag">GOOGLE API</text>
   <text x="145" y="364" class="label">Calendar Events API</text>
-  <text x="145" y="387" class="small">source state changes</text>
+  <text x="145" y="387" class="small">Source state changes</text>
 
   <rect x="295" y="315" width="220" height="92" class="box messaging"/>
   <text x="405" y="334" class="tag">MANAGED DELIVERY SIGNAL</text>
@@ -81,20 +81,20 @@
   <rect x="570" y="315" width="240" height="92" class="box run"/>
   <text x="690" y="334" class="tag">CLOUD RUN · PUBLIC INGRESS</text>
   <text x="690" y="364" class="label">Calendar Webhook</text>
-  <text x="690" y="387" class="small">channel token · rate limit · fetch only</text>
+  <text x="690" y="387" class="small">Channel token · rate limit · fetch only</text>
 
   <!-- Shared synchronization path -->
   <rect x="885" y="224" width="255" height="116" class="box messaging"/>
   <text x="1012" y="244" class="tag">MANAGED MESSAGING</text>
   <text x="1012" y="275" class="label">Cloud Tasks</text>
   <text x="1012" y="298" class="label">Synchronization Job</text>
-  <text x="1012" y="321" class="small">named task + serialized retry</text>
+  <text x="1012" y="321" class="small">Named task + serialized retry</text>
 
   <rect x="1205" y="224" width="325" height="116" class="box run"/>
   <text x="1367" y="244" class="tag">CLOUD RUN · AUTHENTICATED WORKER</text>
   <text x="1367" y="275" class="label">Synchronization Worker</text>
-  <text x="1367" y="298" class="small">stage bounded Gmail or Calendar pages</text>
-  <text x="1367" y="321" class="small">publish cursor only after complete apply</text>
+  <text x="1367" y="298" class="small">Stage bounded Gmail or Calendar pages</text>
+  <text x="1367" y="321" class="small">Publish cursor only after complete apply</text>
 
   <path d="M240 201 H295" class="edge"/>
   <path d="M515 201 H570" class="edge"/>
@@ -104,12 +104,12 @@
   <path d="M810 361 H845 V302 H885" class="edge"/>
   <path d="M1140 282 H1205" class="edge"/>
 
-  <circle cx="267" cy="201" r="13" class="step"/><text x="267" y="202" class="step-text">1</text>
-  <circle cx="542" cy="201" r="13" class="step"/><text x="542" y="202" class="step-text">2</text>
-  <circle cx="267" cy="361" r="13" class="step"/><text x="267" y="362" class="step-text">1</text>
-  <circle cx="542" cy="361" r="13" class="step"/><text x="542" y="362" class="step-text">2</text>
+  <circle cx="261" cy="201" r="13" class="step"/><text x="261" y="202" class="step-text">1</text>
+  <circle cx="536" cy="201" r="13" class="step"/><text x="536" y="202" class="step-text">2</text>
+  <circle cx="261" cy="361" r="13" class="step"/><text x="260.5" y="362" class="step-text">1</text>
+  <circle cx="536" cy="361" r="13" class="step"/><text x="536" y="362" class="step-text">2</text>
   <circle cx="845" cy="282" r="13" class="step"/><text x="845" y="283" class="step-text">3</text>
-  <circle cx="1172" cy="282" r="13" class="step"/><text x="1172" y="283" class="step-text">4</text>
+  <circle cx="1166" cy="282" r="13" class="step"/><text x="1166" y="283" class="step-text">4</text>
 
   <!-- User input, observation, and reconciliation -->
   <text x="50" y="473" class="section">DURABLE CONTROL STATE — FIRESTORE OBSERVATIONS DISPATCH THROUGH CLOUD TASKS</text>
@@ -117,72 +117,73 @@
   <rect x="50" y="505" width="190" height="125" class="box actor"/>
   <text x="145" y="525" class="tag">CONTROLLED ACTOR</text>
   <text x="145" y="556" class="label">Controlled User</text>
-  <text x="145" y="580" class="small">reviews evidence and plans</text>
-  <text x="145" y="603" class="small">approves, pauses, completes</text>
+  <text x="145" y="580" class="small">Reviews evidence and plans</text>
+  <text x="145" y="603" class="small">Approves, pauses, completes</text>
 
   <rect x="295" y="505" width="220" height="125" class="box run"/>
   <text x="405" y="525" class="tag">CLOUD RUN · AUTHENTICATED APP</text>
   <text x="405" y="556" class="label">React Dashboard</text>
   <text x="405" y="580" class="small">Google OAuth session + CSRF</text>
-  <text x="405" y="603" class="small">approvals · check-ins · completion</text>
+  <text x="405" y="603" class="small">Approvals · check-ins · completion</text>
 
   <rect x="570" y="505" width="240" height="125" class="box store"/>
   <text x="690" y="525" class="tag">FIRESTORE</text>
   <text x="690" y="556" class="label">User Input State</text>
   <text x="690" y="580" class="small">approval_resolved observation</text>
-  <text x="690" y="603" class="small">durable execution controls</text>
+  <text x="690" y="603" class="small">Durable execution controls</text>
 
   <rect x="835" y="505" width="115" height="125" class="box messaging"/>
   <text x="892" y="525" class="tag">CLOUD TASKS</text>
   <text x="892" y="556" class="label">Reconcile</text>
-  <text x="892" y="580" class="small">named task</text>
-  <text x="892" y="603" class="small">generation ID</text>
+  <text x="892" y="580" class="small">Named task</text>
+  <text x="892" y="603" class="small">Generation ID</text>
 
   <rect x="965" y="505" width="175" height="125" class="box run"/>
   <text x="1052" y="525" class="tag">CLOUD RUN · BOUNDED</text>
   <text x="1052" y="556" class="label">ADK Graph</text>
-  <text x="1052" y="580" class="small">interpret → plan</text>
-  <text x="1052" y="603" class="small">policy + revisions</text>
+  <text x="1052" y="580" class="small">Interpret → Plan</text>
+  <text x="1052" y="603" class="small">Policy + revisions</text>
 
   <rect x="1205" y="485" width="325" height="175" class="box store"/>
   <text x="1367" y="505" class="tag">FIRESTORE</text>
   <text x="1367" y="536" class="label">Durable Observations + Domain State</text>
   <line x1="1235" y1="552" x2="1500" y2="552" stroke="#fdba74" stroke-width="1.5"/>
-  <text x="1367" y="576" class="small">normalized observations • durable holds</text>
-  <text x="1367" y="599" class="small">terminal action_result observations</text>
-  <text x="1367" y="622" class="small">commitments • blocks • Calendar snapshots</text>
-  <text x="1367" y="645" class="small">projections • audit • controls • revisions</text>
+  <text x="1367" y="576" class="small">Normalized observations • durable holds</text>
+  <text x="1367" y="599" class="small">Terminal action_result observations</text>
+  <text x="1367" y="622" class="small">Commitments • blocks • Calendar snapshots</text>
+  <text x="1367" y="645" class="small">Projections • audit • controls • revisions</text>
 
   <rect x="50" y="680" width="190" height="125" class="box messaging"/>
   <text x="145" y="700" class="tag">MANAGED SCHEDULER</text>
   <text x="145" y="731" class="label">Cloud Scheduler</text>
-  <text x="145" y="755" class="small">renewal + recovery trigger</text>
-  <text x="145" y="778" class="small">periodic safety cadence</text>
+  <text x="145" y="755" class="small">Renewal + recovery trigger</text>
+  <text x="145" y="778" class="small">Periodic safety cadence</text>
 
   <rect x="295" y="680" width="220" height="125" class="box run"/>
   <text x="405" y="700" class="tag">CLOUD RUN · SCHEDULED HANDLER</text>
   <text x="405" y="731" class="label">Renewal + Recovery</text>
   <text x="405" y="753" class="label">Dispatcher</text>
-  <text x="405" y="778" class="small">watches • cursors • outbox repair</text>
+  <text x="405" y="778" class="small">Watches • cursors • outbox repair</text>
 
   <rect x="570" y="680" width="240" height="125" class="box api"/>
   <text x="690" y="700" class="tag">GOOGLE API</text>
   <text x="690" y="731" class="label">Gemini 3.5 Flash</text>
-  <text x="690" y="755" class="small">ownership + deadline semantics</text>
-  <text x="690" y="778" class="small">strict structured proposals</text>
+  <text x="690" y="755" class="small">Ownership + deadline semantics</text>
+  <text x="690" y="778" class="small">Strict structured proposals</text>
 
   <path d="M1367 340 V485" class="edge"/>
-  <text x="1435" y="423" class="edge-label">write transaction</text>
+  <text x="1435" y="421" class="edge-label">write transaction</text>
   <path d="M240 567 H295" class="edge"/>
   <path d="M515 567 H570" class="edge"/>
   <path d="M810 567 H835" class="edge"/>
   <path d="M950 567 H965" class="edge"/>
   <path d="M1205 575 H1170 V665 H892 V630" class="edge"/>
-  <path d="M1052 630 V655 H690 V680" class="exchange"/>
-  <text x="850" y="648" class="edge-label">structured request / response</text>
+  <path d="M1000 653 V677" class="recovery-under"/>
+  <path d="M1000 630 V742 H810" class="exchange"/>
+  <text x="908" y="730" class="edge-label">structured request / response</text>
   <path d="M240 742 H295" class="edge"/>
-  <path d="M405 680 V650 H540 V450 H1012 V340" class="recovery-under"/>
-  <path d="M405 680 V650 H540 V450 H1012 V340" class="recovery"/>
+  <path d="M545 590 V545" class="recovery-under"/>
+  <path d="M405 680 V650 H545 V490 H1012 V340" class="recovery"/>
 
   <circle cx="1367" cy="417" r="13" class="step"/><text x="1367" y="418" class="step-text">5</text>
   <circle cx="957" cy="567" r="13" class="step"/><text x="957" y="568" class="step-text">6</text>
@@ -197,7 +198,7 @@
   <text x="170" y="931" class="label">Secret Manager</text>
   <text x="170" y="954" class="small">OAuth client · refresh token</text>
   <text x="170" y="977" class="small">Gemini key · webhook channel token</text>
-  <text x="170" y="1018" class="edge-label">read at use by the runtime service account;</text>
+  <text x="170" y="1018" class="edge-label">Read at use by the runtime service account;</text>
   <text x="170" y="1035" class="edge-label">never in env vars, code, or logs</text>
 
   <!-- Seeded judge mode: deliberately edge-free — no path to live state exists -->
@@ -205,30 +206,30 @@
   <text x="415" y="900" class="tag">CLOUD RUN · PUBLIC READ-ONLY</text>
   <text x="415" y="931" class="label">Seeded Judge Mode</text>
   <text x="415" y="954" class="small">/demo · static seeded reads</text>
-  <text x="415" y="977" class="small">no Firestore or credential path</text>
+  <text x="415" y="977" class="small">No Firestore or credential path</text>
 
   <rect x="570" y="880" width="240" height="116" class="box run"/>
   <text x="690" y="900" class="tag">CLOUD RUN · AUTHENTICATED WORKER</text>
   <text x="690" y="931" class="label">Calendar Executor</text>
-  <text x="690" y="954" class="small">claim → final pre-I/O control check</text>
+  <text x="690" y="954" class="small">Claim → final pre-I/O control check</text>
   <text x="690" y="977" class="small">If-Match patch/cancel only</text>
 
   <rect x="885" y="880" width="255" height="116" class="box messaging"/>
   <text x="1012" y="900" class="tag">MANAGED MESSAGING</text>
   <text x="1012" y="931" class="label">Cloud Tasks</text>
   <text x="1012" y="954" class="label">Execution Queue</text>
-  <text x="1012" y="977" class="small">named delivery + retries</text>
+  <text x="1012" y="977" class="small">Named delivery + retries</text>
 
   <rect x="1205" y="880" width="325" height="116" class="box store"/>
   <text x="1367" y="900" class="tag">FIRESTORE · DURABLE INTENT</text>
   <text x="1367" y="931" class="label">Plan + Action Outbox</text>
-  <text x="1367" y="954" class="small">expected revisions + observed etag</text>
-  <text x="1367" y="977" class="small">control epoch + stable event ID</text>
+  <text x="1367" y="954" class="small">Expected revisions + observed ETag</text>
+  <text x="1367" y="977" class="small">Control epoch + stable event ID</text>
 
   <path d="M1052 630 V835 H1367 V880" class="edge"/>
   <path d="M1205 938 H1140" class="edge"/>
   <path d="M885 938 H810" class="edge"/>
-  <path d="M405 805 V825 H1012 V880" class="recovery"/>
+  <path d="M405 805 V818 H1012 V880" class="recovery"/>
 
   <!-- Fast durable action continuation: executor result is recorded before task acknowledgment. -->
   <path d="M690 996 V1065 H1570 V620 H1530" class="result"/>
@@ -236,11 +237,11 @@
 
   <!-- Independent verification: the Calendar mutation must return through watch + source synchronization. -->
   <path d="M570 938 H540 V1110 H25 V361 H50" class="return"/>
-  <text x="320" y="1101" class="edge-label">approved Calendar mutation → independent watch verification</text>
+  <text x="305" y="1101" class="edge-label">approved Calendar mutation → independent watch verification</text>
 
   <circle cx="1367" cy="835" r="13" class="step"/><text x="1367" y="836" class="step-text">7</text>
-  <circle cx="1172" cy="938" r="13" class="step"/><text x="1172" y="939" class="step-text">8</text>
-  <circle cx="848" cy="938" r="13" class="step"/><text x="848" y="939" class="step-text">9</text>
+  <circle cx="1179" cy="938" r="13" class="step"/><text x="1179" y="939" class="step-text">8</text>
+  <circle cx="851" cy="938" r="13" class="step"/><text x="851" y="939" class="step-text">9</text>
   <circle cx="850" cy="1065" r="13" fill="#f97316"/><text x="850" y="1066" class="step-text">10</text>
 
   <rect x="50" y="1145" width="1480" height="38" class="note"/>
