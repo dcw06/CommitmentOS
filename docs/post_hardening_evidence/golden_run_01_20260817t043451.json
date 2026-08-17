@@ -1,0 +1,23 @@
+{
+  "run_tag": "20260817t043451",
+  "mode": "thread",
+  "passed": false,
+  "aborted": "TimeoutError: observation c5a3d2c81d3a\u2026 terminal",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation c5a3d2c81d3a\u2026 terminal",
+      "ok": false,
+      "detail": "timeout 240.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: observation c5a3d2c81d3a\u2026 terminal"
+    }
+  ]
+}

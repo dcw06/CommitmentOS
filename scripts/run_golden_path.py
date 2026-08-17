@@ -75,6 +75,9 @@ from commitmentos.infrastructure.firestore.repositories.implementations import (
     EVIDENCE,
     PLANNER_RUNS,
     SOURCE_OBSERVATIONS,
+    SYNC_CURSORS,
+    SYNC_GENERATIONS,
+    SYNC_REQUESTS,
     WORK_BLOCKS,
 )
 from commitmentos.infrastructure.google.calendar_reader import GoogleCalendarReader  # noqa: E402
@@ -380,9 +383,19 @@ class GoldenPathRunner:
             for observation_id, doc in await self.query(
                 SOURCE_OBSERVATIONS, self.user_filter()
             ):
+                lease_expiry = doc.get("processing_lease_expires_at")
+                lease_active = bool(
+                    doc.get("processing_lease_owner")
+                    and lease_expiry
+                    and lease_expiry.timestamp() > time.time()
+                )
+                # attempts>=1 included: a first delivery that draws a retryable
+                # 503 (reset cancel-echo sync barrier) backs off past every
+                # driver wait budget; redelivery is replay-safe (no_op on
+                # convergence), so rescue anything idle without a live lease.
                 if (
                     doc.get("reconciliation_status") in ("pending", "queued")
-                    and int(doc.get("processing_attempt") or 0) == 0
+                    and not lease_active
                     and _stale(doc, "observed_at")
                 ):
                     token = token or self._cached_tasks_token()
@@ -429,7 +442,11 @@ class GoldenPathRunner:
         except Exception as error:  # noqa: BLE001
             print(f"transport rescue: {error}")
 
-    async def wait_terminal_observation(self, observation_id: str, timeout: float = 240.0):
+    # 420s: a first delivery that draws a retryable 503 (e.g. the reset's
+    # cancel-echo sync still holds the calendar publication barrier) backs off
+    # past the old 240s budget; rescue skips attempts>=1, so the repair path is
+    # the 5-minute dispatch_pending sweep. The budget must outlive one sweep.
+    async def wait_terminal_observation(self, observation_id: str, timeout: float = 420.0):
         async def _probe():  # noqa: ANN202
             doc = await self.get_raw(SOURCE_OBSERVATIONS, observation_id)
             if doc and doc.get("reconciliation_status") in ("processed", "ignored"):
@@ -557,7 +574,6 @@ class GoldenPathRunner:
             )
 
     async def state_digest(self) -> str:
-        view: dict[str, Any] = {}
         selectors = {
             COMMITMENTS: lambda d: {
                 "revision": d.get("revision"),
@@ -581,12 +597,123 @@ class GoldenPathRunner:
                 "execution": d.get("execution_status"),
             },
         }
+
+        async def _load(repositories):  # noqa: ANN001, ANN202
+            # One Firestore transaction gives the digest a serializable read
+            # point across every collection. Separate read-only queries can
+            # otherwise straddle a workflow commit and manufacture a state
+            # that never existed (the 2026-08-17 live replay false failure).
+            return {
+                collection: await repositories._context.query(collection, [])  # noqa: SLF001
+                for collection in selectors
+            }
+
+        rows_by_collection = await self.uow.run(_load)
+        view: dict[str, Any] = {}
         for collection, select in selectors.items():
-            rows = await self.query(collection, [])
+            rows = rows_by_collection[collection]
             view[collection] = {doc_id: select(doc) for doc_id, doc in sorted(rows)}
         return hashlib.sha256(
             json.dumps(view, sort_keys=True, default=str).encode()
         ).hexdigest()
+
+    async def _replay_pipeline_busy(self) -> tuple[str, ...]:
+        """Return durable work that can still change replay-digested state."""
+
+        async def _load(repositories):  # noqa: ANN001, ANN202
+            context = repositories._context  # noqa: SLF001
+            return {
+                SOURCE_OBSERVATIONS: await context.query(SOURCE_OBSERVATIONS, []),
+                ACTION_OUTBOX: await context.query(ACTION_OUTBOX, []),
+                SYNC_REQUESTS: await context.query(SYNC_REQUESTS, []),
+                SYNC_GENERATIONS: await context.query(SYNC_GENERATIONS, []),
+                SYNC_CURSORS: await context.query(SYNC_CURSORS, []),
+            }
+
+        rows = await self.uow.run(_load)
+        user_id = self.settings.controlled_user_id
+        busy: list[str] = []
+        for document_id, document in rows[SOURCE_OBSERVATIONS]:
+            if document.get("user_id") == user_id and document.get(
+                "reconciliation_status"
+            ) not in ("processed", "ignored", "rejected"):
+                busy.append(
+                    f"observation:{document_id[:12]}:{document.get('reconciliation_status')}"
+                )
+        for document_id, document in rows[ACTION_OUTBOX]:
+            if document.get("user_id") == user_id and document.get(
+                "execution_status"
+            ) not in (
+                "succeeded",
+                "terminal_failed",
+                "stale",
+                "stale_precondition",
+                "superseded",
+            ):
+                busy.append(
+                    f"action:{document_id[:12]}:{document.get('execution_status')}"
+                )
+        for document_id, document in rows[SYNC_REQUESTS]:
+            if (
+                document.get("user_id") == user_id
+                and document.get("status") == "pending"
+            ):
+                busy.append(f"sync-request:{document_id[:12]}:pending")
+        for document_id, document in rows[SYNC_GENERATIONS]:
+            if document.get("user_id") == user_id and document.get("status") in (
+                "staging",
+                "applying",
+                "ready_to_publish",
+            ):
+                busy.append(
+                    f"sync-generation:{document_id[:12]}:{document.get('status')}"
+                )
+        for document_id, document in rows[SYNC_CURSORS]:
+            if (
+                document.get("user_id") == user_id
+                and document.get("publish_in_progress_generation_id") is not None
+            ):
+                busy.append(f"sync-cursor:{document_id[:12]}:publication-barrier")
+        return tuple(sorted(busy))
+
+    async def wait_replay_quiescent(
+        self,
+        timeout: float = 420.0,
+        poll_interval: float = 1.0,
+        stable_samples: int = 2,
+    ) -> str:
+        """Return a digest only after durable producers and state are quiet.
+
+        The digest remains strict: it still covers every observation and
+        action. This barrier merely prevents an already-running source sync or
+        reconciliation from being misattributed to the redeliveries under
+        test. Two equal serializable snapshots also close the small handoff
+        race between observing an empty pipeline and taking the baseline.
+        """
+        deadline = time.monotonic() + timeout
+        previous_digest: str | None = None
+        stable_count = 0
+        last_rescue = time.monotonic()
+        while time.monotonic() < deadline:
+            busy = await self._replay_pipeline_busy()
+            digest = await self.state_digest()
+            if not busy and digest == previous_digest:
+                stable_count += 1
+            elif not busy:
+                stable_count = 1
+            else:
+                stable_count = 0
+            previous_digest = digest
+            if stable_count >= stable_samples:
+                return digest
+            now = time.monotonic()
+            if now - last_rescue >= 20.0:
+                last_rescue = now
+                await self.rescue_stuck_transport()
+            await asyncio.sleep(poll_interval)
+        busy = await self._replay_pipeline_busy()
+        detail = ", ".join(busy[:5]) or "state did not stabilize"
+        raise TimeoutError(f"replay quiescence barrier: {detail}")
 
     # -- scenario legs -------------------------------------------------------
 
@@ -775,7 +902,7 @@ class GoldenPathRunner:
     # -- replays -------------------------------------------------------------
 
     async def replay_everything(self) -> tuple[bool, str, str]:
-        before = await self.state_digest()
+        before = await self.wait_replay_quiescent()
         token = self.tasks_identity_token()
         observations = [
             (i, d)
@@ -813,7 +940,7 @@ class GoldenPathRunner:
                 },
                 token,
             )
-        after = await self.state_digest()
+        after = await self.wait_replay_quiescent()
         checkpoint(
             "replay of every observation and action leaves state byte-identical",
             before == after,
@@ -1034,7 +1161,10 @@ class GoldenPathRunner:
             live = [b for b in blocks if b[1].get("execution_state") == "planned"]
             return live if live else None
 
-        await self.wait_for("golden plan committed with work blocks", _golden_blocks, 120.0)
+        # 420s: late throttled cancel-echo syncs can bump calendar_state_revision
+        # mid-replan, staling planner attempts until the 60s safety
+        # reconciliation replans from fresh facts; the budget must cover that.
+        await self.wait_for("golden plan committed with work blocks", _golden_blocks, 420.0)
         golden_blocks = await self.verify_blocks_envelope(
             self.golden_commitment_id, 180, deadline, second_blocks
         )

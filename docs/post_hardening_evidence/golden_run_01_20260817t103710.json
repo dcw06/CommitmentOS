@@ -1,0 +1,18 @@
+{
+  "run_tag": "20260817t103710",
+  "mode": "seeded",
+  "passed": false,
+  "aborted": "RetryError: Timeout of 300.0s exceeded, last exception: 503 failed to connect to all addresses; last error: UNKNOWN: ipv4:142.250.73.138:443: tcp handshaker shutdown",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "RetryError: Timeout of 300.0s exceeded, last exception: 503 failed to connect to all addresses; last error: UNKNOWN: ipv4:142.250.73.138:443: tcp handshaker shutdown"
+    }
+  ]
+}

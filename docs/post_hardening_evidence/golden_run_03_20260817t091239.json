@@ -1,0 +1,268 @@
+{
+  "run_tag": "20260817t091239",
+  "mode": "seeded",
+  "started_at": "2026-08-17T09:12:40.070107+00:00",
+  "golden_commitment_id": "ad824caddaf2c8206af5d0fea82dce6f31d856ee4ca09081e8d7a0a2655133d7",
+  "deadline": "2026-08-20T23:00:00+00:00",
+  "golden_block_count": 3,
+  "conflict_to_repair_seconds": 38.825,
+  "verified_minutes_at_completion": 120,
+  "replay_digest": "9799349954915e2a",
+  "conflict_event_id": "47t0mtevao3e\u2026",
+  "completed_at": "2026-08-17T09:21:01.614003+00:00",
+  "checkpoints_passed": 50,
+  "checkpoints_total": 50,
+  "passed": true,
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation 7acd633f2215\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 62691275af\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 3b54dcbfe8\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation 1783552ea5da\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "golden commitment seeded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "golden plan committed with work blocks",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "allocated minutes equal confirmed effort",
+      "ok": true,
+      "detail": "180/180"
+    },
+    {
+      "label": "block 275cf98f72\u2026 inside envelope",
+      "ok": true,
+      "detail": "Mon 13:15-14:15"
+    },
+    {
+      "label": "block 4446566d6f\u2026 inside envelope",
+      "ok": true,
+      "detail": "Wed 09:00-10:00"
+    },
+    {
+      "label": "block 077a84c351\u2026 inside envelope",
+      "ok": true,
+      "detail": "Thu 09:00-10:00"
+    },
+    {
+      "label": "no interval allocated twice across the portfolio",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "label": "calendar event exists for block 275cf98f72\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 4446566d6f\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block 077a84c351\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "every block carries its stable derived event ID",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "all create actions succeeded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar channel settled before the conflict leg",
+      "ok": true,
+      "detail": "76s since last sync generation"
+    },
+    {
+      "label": "block 275cf98f72\u2026 elapsed to awaiting_check_in (driver stand-in)",
+      "ok": true,
+      "detail": "rev 2"
+    },
+    {
+      "label": "check-in 60m recorded via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "identical check-in redelivery converges",
+      "ok": true,
+      "detail": "check_in_already_recorded"
+    },
+    {
+      "label": "watch channel proven live before conflict insert",
+      "ok": true,
+      "detail": "attempt 1, 8.0s"
+    },
+    {
+      "label": "conflict meeting inserted (recorded API convention)",
+      "ok": true,
+      "detail": "47t0mtevao3ecs"
+    },
+    {
+      "label": "conflict repaired: target block moved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "conflict-to-repair latency inside operational budget",
+      "ok": true,
+      "detail": "38.825s (warmed budget 15s)"
+    },
+    {
+      "label": "moved block kept its stable event ID",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "every unaffected golden block preserved byte-identically",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "second commitment's blocks untouched by the repair",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "conflict meeting itself untouched",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "block 4446566d6f\u2026 elapsed to awaiting_check_in (driver stand-in)",
+      "ok": true,
+      "detail": "rev 3"
+    },
+    {
+      "label": "check-in 60m recorded via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "identical check-in redelivery converges",
+      "ok": true,
+      "detail": "check_in_already_recorded"
+    },
+    {
+      "label": "block 077a84c351\u2026 elapsed to awaiting_check_in (driver stand-in)",
+      "ok": true,
+      "detail": "rev 2"
+    },
+    {
+      "label": "completion recorded via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "identical completion redelivery converges",
+      "ok": true,
+      "detail": "completion_already_recorded"
+    },
+    {
+      "label": "commitment terminal with completion evidence",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "verified minutes remain 120 \u2014 honest closure below the estimate",
+      "ok": true,
+      "detail": "120"
+    },
+    {
+      "label": "pending check-in requests closed by completion",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "frozen audit order holds (18-step contract, campaign form)",
+      "ok": true,
+      "detail": "47 events"
+    },
+    {
+      "label": "replay of every observation and action leaves state byte-identical",
+      "ok": true,
+      "detail": "23 obs + 6 actions"
+    },
+    {
+      "label": "commitment stays closed after replay",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "run_tag": "20260817t054859",
+  "mode": "seeded",
+  "passed": false,
+  "aborted": "TimeoutError: golden plan committed with work blocks",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation ebc51a3c80cb\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "second commitment planned with real events",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block c789bf3374\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "calendar event exists for block cf285e9e09\u2026",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "observation d476fa5066e4\u2026 terminal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "golden commitment seeded",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "effort_confirmation resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "initial_plan_approval pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "initial_plan_approval resolved via guarded route",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "golden plan committed with work blocks",
+      "ok": false,
+      "detail": "timeout 120.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: golden plan committed with work blocks"
+    }
+  ]
+}

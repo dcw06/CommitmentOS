@@ -1,0 +1,23 @@
+{
+  "run_tag": "20260817t052556",
+  "mode": "seeded",
+  "passed": false,
+  "aborted": "TimeoutError: observation 77995543fc68\u2026 terminal",
+  "checkpoints": [
+    {
+      "label": "run starts from a clean portfolio",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "label": "observation 77995543fc68\u2026 terminal",
+      "ok": false,
+      "detail": "timeout 240.0s"
+    },
+    {
+      "label": "run aborted",
+      "ok": false,
+      "detail": "TimeoutError: observation 77995543fc68\u2026 terminal"
+    }
+  ]
+}
