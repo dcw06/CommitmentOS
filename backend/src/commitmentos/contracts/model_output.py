@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, time
 from enum import StrEnum
 from typing import Literal, Mapping
+from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
@@ -123,6 +125,13 @@ class InterpretationWireV2(BaseModel):
 
 
 _WHITESPACE = re.compile(r"\s+")
+_EXPLICIT_CLOCK_TIME = re.compile(
+    r"\b(?:noon|midnight|morning|afternoon|evening|\d{1,2}:\d{2})\b|"
+    r"\b\d{1,2}\s*(?:am|pm|a\.m\.|p\.m\.)(?=\W|$)|"
+    r"\b(?:at|around|before|after)\s+(?:[01]?\d|2[0-3])\b|"
+    r"\bby\s+(?:[1-9]|1[0-2])\b",
+    re.IGNORECASE,
+)
 
 _RESERVED_DELIMITER_TAGS = (
     "untrusted_source_messages",
@@ -271,6 +280,8 @@ class ModelOutputValidator:
         interpretation: CommitmentInterpretationV1,
         message_bodies: Mapping[str, str],
         allowed_target_commitment_ids: frozenset[str],
+        deadline_timezone: str = "UTC",
+        working_day_end: time = time(17, 30),
     ) -> ModelValidationResult:
         if interpretation.schema_version != EXTRACTION_SCHEMA_V2:
             return ModelValidationResult(
@@ -286,6 +297,11 @@ class ModelOutputValidator:
         }
         results: list[ProposalValidationResult] = []
         for proposal in interpretation.proposals:
+            proposal = self._normalize_date_only_deadline(
+                proposal,
+                deadline_timezone,
+                working_day_end,
+            )
             results.append(
                 self._validate_proposal(proposal, collapsed_bodies, allowed_target_commitment_ids)
             )
@@ -303,6 +319,40 @@ class ModelOutputValidator:
             error_codes=tuple(
                 code for result in results for code in result.error_codes
             ),
+        )
+
+    @staticmethod
+    def _normalize_date_only_deadline(
+        proposal: CommitmentSemanticProposalV1,
+        timezone_name: str,
+        working_day_end: time,
+    ) -> CommitmentSemanticProposalV1:
+        deadline = proposal.deadline
+        if (
+            deadline is None
+            or deadline.proposed_value is None
+            or _EXPLICIT_CLOCK_TIME.search(deadline.source_expression)
+        ):
+            return proposal
+        try:
+            parsed = datetime.fromisoformat(
+                deadline.proposed_value.replace("Z", "+00:00")
+            )
+        except ValueError:
+            # The strict wire/schema parser owns malformed-value rejection;
+            # normalization must never turn bad model output into a crash.
+            return proposal
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return proposal
+        zone = ZoneInfo(timezone_name)
+        normalized = datetime.combine(
+            parsed.astimezone(zone).date(),
+            working_day_end,
+            tzinfo=zone,
+        )
+        return replace(
+            proposal,
+            deadline=replace(deadline, proposed_value=normalized.isoformat()),
         )
 
     def _validate_proposal(

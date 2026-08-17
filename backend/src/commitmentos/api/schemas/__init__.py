@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,7 +11,7 @@ class StrictApiModel(BaseModel):
 
 
 class RevisionedMutationRequest(StrictApiModel):
-    expected_revision: int = Field(ge=0)
+    expected_revision: int = Field(ge=1)
 
 
 class ApprovalResolutionRequest(RevisionedMutationRequest):
@@ -33,6 +33,18 @@ class CompleteCommitmentApiRequest(RevisionedMutationRequest):
     idempotency_key: str = Field(min_length=1, max_length=128)
     completed_at: datetime
     note: str | None = Field(default=None, max_length=500)
+
+
+class ReopenCommitmentApiRequest(RevisionedMutationRequest):
+    pass
+
+
+class SetCommitmentPriorityApiRequest(RevisionedMutationRequest):
+    priority: int = Field(ge=-100, le=100)
+
+
+class ChangeCommitmentLifecycleApiRequest(RevisionedMutationRequest):
+    target_status: Literal["paused", "active", "dismissed"]
 
 
 class PlanUndoApiRequest(StrictApiModel):

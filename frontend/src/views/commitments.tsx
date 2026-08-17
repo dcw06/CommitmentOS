@@ -3,10 +3,13 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   completeCommitment,
+  changeCommitmentLifecycle,
   DEMO_MODE,
   fetchCommitmentDetail,
   fetchCommitments,
   recordCheckIn,
+  reopenCommitment,
+  setCommitmentPriority,
   WorkBlockView,
 } from "../api";
 import {
@@ -18,6 +21,7 @@ import {
   useAction,
   usePolling,
 } from "../ui";
+import { ApprovalCard } from "./today";
 
 export function CommitmentsPage() {
   const { data, error } = usePolling(fetchCommitments, 15000);
@@ -45,7 +49,17 @@ export function CommitmentsPage() {
                     ` · due ${DEMO_MODE ? item.deadline : formatDateTime(item.deadline)}`}
                   {item.remainingMinutes !== null &&
                     ` · ${minutesLabel(item.remainingMinutes)} remaining`}
+                  {item.portfolio &&
+                    ` · ${minutesLabel(item.portfolio.allocatedMinutes)} allocated · ${minutesLabel(item.portfolio.sharedBufferMinutes)} shared buffer`}
                 </div>
+                {item.portfolio && (
+                  <div className="sub">
+                    Portfolio {item.portfolio.position}/{item.portfolio.size} · projected{" "}
+                    {formatDateTime(item.portfolio.projectedFinish) || "—"}
+                    {item.portfolio.shortfallMinutes > 0 &&
+                      ` · ${minutesLabel(item.portfolio.shortfallMinutes)} shortfall`}
+                  </div>
+                )}
               </div>
               <Badge value={item.lifecycleStatus} />
               {item.riskLevel !== "unknown" && <Badge value={item.riskLevel} />}
@@ -127,7 +141,9 @@ export function CommitmentDetailPage() {
     10000,
   );
   const completion = useAction(refresh);
+  const changes = useAction(refresh);
   const [note, setNote] = useState("");
+  const [priority, setPriority] = useState<number | null>(null);
 
   if (!data) return <div className="loading">{error ?? "Loading commitment…"}</div>;
   const { summary } = data;
@@ -135,6 +151,34 @@ export function CommitmentDetailPage() {
   const verified = summary.verifiedMinutes ?? 0;
   const progress = confirmed > 0 ? Math.min(verified / confirmed, 1) : 0;
   const completed = summary.lifecycleStatus === "completed";
+  const terminal = ["completed", "dismissed", "canceled"].includes(
+    summary.lifecycleStatus,
+  );
+  const canPause = ["active", "in_progress"].includes(summary.lifecycleStatus);
+  const canResume = summary.lifecycleStatus === "paused";
+  const canDismiss = ["candidate", "awaiting_confirmation", "paused"].includes(
+    summary.lifecycleStatus,
+  );
+  const canComplete = [
+    "active",
+    "in_progress",
+    "completion_candidate",
+    "paused",
+  ].includes(summary.lifecycleStatus);
+
+  const lifecycleChange = (
+    target: "paused" | "active" | "dismissed",
+  ) => {
+    if (
+      target === "dismissed" &&
+      !window.confirm(
+        "Dismiss this commitment? Its pending confirmations will be superseded and it will leave the active portfolio.",
+      )
+    ) {
+      return Promise.resolve();
+    }
+    return changeCommitmentLifecycle(summary.commitmentId, data.revision, target);
+  };
 
   return (
     <>
@@ -179,6 +223,22 @@ export function CommitmentDetailPage() {
             <div className="k">Verified progress</div>
             <div className="v">{minutesLabel(verified)}</div>
           </div>
+          <div>
+            <div className="k">Priority</div>
+            <div className="v">{data.explicitPriority}</div>
+          </div>
+          <div>
+            <div className="k">Risk</div>
+            <div className="v"><Badge value={summary.riskLevel} /></div>
+          </div>
+          <div>
+            <div className="k">Remaining effort</div>
+            <div className="v">{minutesLabel(summary.remainingMinutes)}</div>
+          </div>
+          <div>
+            <div className="k">Blocking</div>
+            <div className="v"><Badge value={summary.blockingStatus} /></div>
+          </div>
         </div>
         {confirmed > 0 && (
           <>
@@ -199,6 +259,130 @@ export function CommitmentDetailPage() {
           </p>
         )}
       </Card>
+
+      {summary.portfolio && (
+        <Card
+          title="Portfolio allocation"
+          note={`Published planner run ${summary.portfolio.plannerRunId.slice(0, 12)}…`}
+        >
+          <div className="detail-grid">
+            <div>
+              <div className="k">Stable order</div>
+              <div className="v">
+                {summary.portfolio.position} of {summary.portfolio.size}
+              </div>
+            </div>
+            <div>
+              <div className="k">Allocated work</div>
+              <div className="v">{minutesLabel(summary.portfolio.allocatedMinutes)}</div>
+            </div>
+            <div>
+              <div className="k">Projected finish</div>
+              <div className="v">
+                {formatDateTime(summary.portfolio.projectedFinish) || "—"}
+              </div>
+            </div>
+            <div>
+              <div className="k">Shortfall</div>
+              <div className="v">{minutesLabel(summary.portfolio.shortfallMinutes)}</div>
+            </div>
+            <div>
+              <div className="k">Shared buffer</div>
+              <div className="v">{minutesLabel(summary.portfolio.sharedBufferMinutes)}</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {data.approvals.length > 0 && (
+        <Card
+          title="Pending confirmation"
+          note="Confirm or reject this commitment without leaving its evidence view."
+        >
+          {data.approvals.map((approval) => (
+            <ApprovalCard
+              key={approval.approvalId}
+              approval={approval}
+              refresh={refresh}
+            />
+          ))}
+        </Card>
+      )}
+
+      {!DEMO_MODE && (
+        <Card
+          title="Commitment controls"
+          note="Priority is an explicit portfolio tie-breaker; lower numbers plan first. Reopening is available only after completion."
+        >
+          <div className="inline-form">
+            <input
+              type="number"
+              min={-100}
+              max={100}
+              disabled={terminal}
+              aria-label="Commitment priority"
+              value={priority ?? data.explicitPriority}
+              onChange={(event) => setPriority(Number(event.target.value))}
+            />
+            {!terminal && (
+              <button
+                disabled={changes.busy}
+                onClick={() =>
+                  changes.run(() =>
+                    setCommitmentPriority(
+                      summary.commitmentId,
+                      data.revision,
+                      priority ?? data.explicitPriority,
+                    ),
+                  )
+                }
+              >
+                Save priority
+              </button>
+            )}
+            {completed && (
+              <button
+                className="primary"
+                disabled={changes.busy}
+                onClick={() =>
+                  changes.run(() =>
+                    reopenCommitment(summary.commitmentId, data.revision),
+                  )
+                }
+              >
+                Reopen commitment
+              </button>
+            )}
+            {canPause && (
+              <button
+                disabled={changes.busy}
+                onClick={() => changes.run(() => lifecycleChange("paused"))}
+              >
+                Pause commitment
+              </button>
+            )}
+            {canResume && (
+              <button
+                className="primary"
+                disabled={changes.busy}
+                onClick={() => changes.run(() => lifecycleChange("active"))}
+              >
+                Resume commitment
+              </button>
+            )}
+            {canDismiss && (
+              <button
+                className="danger"
+                disabled={changes.busy}
+                onClick={() => changes.run(() => lifecycleChange("dismissed"))}
+              >
+                Dismiss commitment
+              </button>
+            )}
+          </div>
+          {changes.error ? <div className="error-note">{changes.error}</div> : null}
+        </Card>
+      )}
 
       <Card
         title="Source evidence"
@@ -222,7 +406,7 @@ export function CommitmentDetailPage() {
         </div>
       </Card>
 
-      {!DEMO_MODE && !completed && (
+      {!DEMO_MODE && canComplete && (
         <Card
           title="Complete this commitment"
           note="Completion is explicit and terminal: verified minutes are kept as-is, never fabricated to match the estimate."

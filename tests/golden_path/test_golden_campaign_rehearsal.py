@@ -144,6 +144,7 @@ def _webhook(app):  # noqa: ANN001, ANN202
         "resource_id": "rehearsal-resource",
         "token_hash": hashlib.sha256(token.encode()).hexdigest(),
         "expiration": app.clock.now() + timedelta(days=7),
+        "status": "active",
     }
     router = CalendarWebhookRouter(
         CalendarChannelVerifier(app.uow, app.clock, 20, 60),
@@ -382,7 +383,10 @@ class TestGoldenCampaignRehearsal:
                 if row["user_id"] == CONTROLLED_USER
                 and row["created_at"] >= run_start
             ),
-            key=lambda row: (row["created_at"], row["_id"]),
+            # Python's stable sort preserves transactional insertion order
+            # when the fake clock gives several events the same timestamp.
+            # The event ID hashes payload content and is not a causal key.
+            key=lambda row: row["created_at"],
         )
         sequence = [row["event_type"] for row in events]
         cursor = 0

@@ -9,6 +9,7 @@ from commitmentos.application.dto import CommandResult, CommandStatus, FencedLea
 from commitmentos.application.ports.calendar_reader import CalendarReader, CalendarSyncPage
 from commitmentos.application.ports.clock import Clock
 from commitmentos.application.ports.gmail_reader import (
+    GmailHistoryChange,
     GmailHistoryPage,
     GmailMessage,
     GmailReader,
@@ -159,13 +160,9 @@ class SynchronizeSource:
                     )
                 except SourceCursorInvalidError:
                     await self._record_cursor_invalid(task, generation, fence)
-                    if task.source == SourceType.CALENDAR:
-                        await self._enqueue_full_resync(task)
-                        return self._result(
-                            CommandStatus.ACCEPTED, {}, "full_resync_required"
-                        )
+                    await self._enqueue_full_resync(task)
                     return self._result(
-                        CommandStatus.TERMINAL_FAILURE, {}, "full_resync_required"
+                        CommandStatus.ACCEPTED, {}, "full_resync_required"
                     )
                 if more_pages:
                     await self._enqueue_continuation(
@@ -288,10 +285,12 @@ class SynchronizeSource:
             cursor, generation_number = await repositories.sync_cursors.reserve_generation_number(
                 task.user_id, task.source, now
             )
-            full_resync = task.source == SourceType.CALENDAR and (
-                cursor.published_cursor is None
-                or cursor.published_generation_id is None
-                or cursor.full_resync_required
+            full_resync = cursor.full_resync_required or (
+                task.source == SourceType.CALENDAR
+                and (
+                    cursor.published_cursor is None
+                    or cursor.published_generation_id is None
+                )
             )
             mode = (
                 SyncGenerationMode.FULL_RESYNC
@@ -323,10 +322,11 @@ class SynchronizeSource:
                 else:
                     parameters["sync_token"] = str(cursor.published_cursor)
             else:
-                parameters = {
-                    "start_history_id": str(cursor.published_cursor),
-                    "signal_version": signal_version,
-                }
+                parameters = {"signal_version": signal_version}
+                if full_resync:
+                    parameters["full_resync_query"] = "{in:inbox in:sent}"
+                else:
+                    parameters["start_history_id"] = str(cursor.published_cursor)
             generation_id = SyncIdFactory.generation_id(
                 task.source, task.user_id, cursor.revision, generation_number
             )
@@ -348,7 +348,9 @@ class SynchronizeSource:
                 staged_item_count=0,
                 applied_item_count=0,
                 outstanding_chunk_id=None,
-                full_sync_tombstones_complete=not full_resync,
+                full_sync_tombstones_complete=not (
+                    full_resync and task.source == SourceType.CALENDAR
+                ),
                 source_lease_key=fence.lease_key,
                 source_lease_owner=fence.owner,
                 source_fencing_token=fence.fencing_token,
@@ -407,10 +409,34 @@ class SynchronizeSource:
             next_page_token = calendar_page.next_page_token
             candidate_next_cursor = calendar_page.next_sync_token
         else:
-            start_history_id = generation.provider_request_parameters["start_history_id"]
-            gmail_page = await self._gmail_reader.list_history(
-                task.user_id, start_history_id, generation.next_page_token
-            )
+            if generation.mode == SyncGenerationMode.FULL_RESYNC:
+                mailbox_page = await self._gmail_reader.list_messages(
+                    task.user_id, generation.next_page_token
+                )
+                gmail_page = GmailHistoryPage(
+                    changes=(
+                        GmailHistoryChange(
+                            # A synthetic change carries provider IDs only;
+                            # immutable content hashes remain the item version.
+                            history_id=mailbox_page.latest_history_id or "full-resync",
+                            message_ids=mailbox_page.message_ids,
+                            label_ids=(),
+                        ),
+                    ) if mailbox_page.message_ids else (),
+                    next_page_token=mailbox_page.next_page_token,
+                    latest_history_id=(
+                        mailbox_page.latest_history_id
+                        or generation.candidate_next_cursor
+                        or ""
+                    ),
+                )
+            else:
+                start_history_id = generation.provider_request_parameters[
+                    "start_history_id"
+                ]
+                gmail_page = await self._gmail_reader.list_history(
+                    task.user_id, start_history_id, generation.next_page_token
+                )
             items = await self._normalize_gmail_page(task, generation, gmail_page)
             next_page_token = gmail_page.next_page_token
             candidate_next_cursor = gmail_page.latest_history_id
@@ -445,7 +471,15 @@ class SynchronizeSource:
             page_manifest=page_manifest,
             aggregate_staged_manifest=aggregate,
             next_page_token=next_page_token,
-            candidate_next_cursor=candidate_next_cursor if final_page else None,
+            candidate_next_cursor=(
+                candidate_next_cursor
+                if final_page
+                or (
+                    task.source == SourceType.GMAIL
+                    and generation.mode == SyncGenerationMode.FULL_RESYNC
+                )
+                else None
+            ),
             final_provider_page=final_page,
             committed_at=self._clock.now(),
         )
@@ -1289,16 +1323,18 @@ class SynchronizeSource:
         await self._unit_of_work.run_fenced(fence, _record)
 
     async def _enqueue_full_resync(self, task: SourceSyncTaskV1) -> None:
-        request_id = f"{SourceType.CALENDAR.value}:{task.user_id}:full-resync"
+        request_id = f"{task.source.value}:{task.user_id}:full-resync"
         now = self._clock.now()
 
         async def _record(repositories: RepositorySet) -> None:
             await repositories.sync_requests.upsert(
                 request_id,
                 {
-                    "source": SourceType.CALENDAR.value,
+                    "source": task.source.value,
                     "user_id": task.user_id,
-                    "calendar_id": self._calendar_id,
+                    "calendar_id": (
+                        self._calendar_id if task.source == SourceType.CALENDAR else None
+                    ),
                     "status": "pending",
                     "full_resync": True,
                     "trace_id": task.trace_id,
@@ -1313,7 +1349,7 @@ class SynchronizeSource:
                 sync_request_id=request_id,
                 sync_generation_id="full-resync",
                 page_sequence=0,
-                source=SourceType.CALENDAR,
+                source=task.source,
                 user_id=task.user_id,
                 trace_id=task.trace_id,
             )

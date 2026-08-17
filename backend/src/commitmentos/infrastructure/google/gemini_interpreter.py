@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from commitmentos.application.ports.model_interpreter import (
     InterpretationResult,
@@ -17,6 +20,12 @@ from commitmentos.contracts.model_output import (
 )
 
 PROMPTS_DIRECTORY = Path(__file__).resolve().parents[2] / "prompts"
+
+
+class ExplanationWireV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explanation: str = Field(min_length=1, max_length=600)
 
 
 class GeminiInterpreter:
@@ -57,7 +66,7 @@ class GeminiInterpreter:
     ) -> InterpretationResult:
         prompt = self._render_prompt(source_text, source_metadata, candidate_commitments)
         response, latency_ms, thinking_applied = await asyncio.to_thread(
-            self._generate, prompt
+            self._generate, prompt, gemini_response_schema()
         )
         wire, error_codes = parse_interpretation_wire(response.text or "")
         if wire is None:
@@ -73,18 +82,64 @@ class GeminiInterpreter:
         decision: Mapping[str, object],
         evidence: Sequence[Mapping[str, str]],
     ) -> tuple[str, ModelInvocationMetadata]:
-        raise NotImplementedError("plain-language explanations land with the Phase 4 repair gate")
+        template = (PROMPTS_DIRECTORY / "explanation_v1.md").read_text(
+            encoding="utf-8"
+        )
+        prompt = "\n".join(
+            (
+                template,
+                "<trusted_decision>",
+                json.dumps(decision, sort_keys=True, default=str),
+                "</trusted_decision>",
+                "<trusted_evidence>",
+                json.dumps(list(evidence), sort_keys=True, default=str),
+                "</trusted_evidence>",
+            )
+        )
+        response, latency_ms, thinking_applied = await asyncio.to_thread(
+            self._generate,
+            prompt,
+            {
+                "type": "object",
+                "properties": {
+                    "explanation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 600,
+                    }
+                },
+                "required": ["explanation"],
+            },
+        )
+        try:
+            wire = ExplanationWireV1.model_validate_json(response.text or "")
+        except ValidationError as error:
+            raise ModelOutputParseError(("explanation_schema_rejected",)) from error
+        return (
+            wire.explanation,
+            self._invocation_metadata(
+                response,
+                latency_ms,
+                thinking_applied,
+                prompt_version="explanation_v1",
+                schema_version="explanation_v1",
+            ),
+        )
 
     # ------------------------------------------------------------------
 
-    def _generate(self, prompt: str) -> tuple[Any, int, bool]:
+    def _generate(
+        self,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+    ) -> tuple[Any, int, bool]:
         from google.genai import types as genai_types
 
         if self._client is None:
             self._client = self._client_factory()
         config_kwargs: dict[str, Any] = {
             "response_mime_type": "application/json",
-            "response_schema": gemini_response_schema(),
+            "response_schema": response_schema,
             "thinking_config": genai_types.ThinkingConfig(
                 thinking_level=self._thinking_level
             ),
@@ -120,6 +175,7 @@ class GeminiInterpreter:
             self._prompt_template,
             f"\nThe controlled user is: {self._controlled_display_name}.",
             f"Thread timezone: {source_metadata.get('timezone', 'UTC')}.",
+            "Configured working-day end for date-only deadlines: 17:30.",
             "\n<candidate_commitments>",
         ]
         if candidate_commitments:
@@ -146,12 +202,14 @@ class GeminiInterpreter:
         response: Any,
         latency_ms: int,
         thinking_applied: bool,
+        prompt_version: str | None = None,
+        schema_version: str | None = None,
     ) -> ModelInvocationMetadata:
         usage = getattr(response, "usage_metadata", None)
         return ModelInvocationMetadata(
             model_id=getattr(response, "model_version", None) or self._model_id,
-            prompt_version=self._prompt_version,
-            schema_version=self._schema_version,
+            prompt_version=prompt_version or self._prompt_version,
+            schema_version=schema_version or self._schema_version,
             thinking_level=self._thinking_level if thinking_applied else "unset",
             latency_ms=latency_ms,
             input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),

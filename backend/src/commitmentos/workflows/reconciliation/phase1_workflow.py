@@ -90,19 +90,14 @@ def derive_calendar_event_id(calendar_id: str, work_block_id: str) -> str:
     return CalendarEventIdFactory().derive(calendar_id, work_block_id)
 
 
-class SeededReconciliationWorkflow:
-    """Phase 1 bounded reconciliation over seeded observations.
+class DurableReconciliationWorkflow:
+    """Bounded, transaction-aware reconciliation controller.
 
-    Implements the §8.3/§8.4 continuation contracts against durable state:
-    seeded Gmail observation -> commitment + effort approval; resolved effort
-    -> initial-plan approval; resolved plan approval -> work blocks + outbox
-    intent in one transaction; control resume -> held-action revalidation.
-
-    Deviation note (recorded for the Phase 2 gate): nodes run through a
-    deterministic in-process route rather than an ADK `Workflow` wrapper.
-    The deployed ADK graph mechanics were proven in the Phase 0 spike; the
-    ADK wrapper joins this workflow when the Gemini interpretation node
-    lands in Phase 2.
+    Production invokes this controller once inside the two-stage ADK boundary
+    in ``graph.py``. The controller owns the real interpretation, identity,
+    portfolio, policy, projection, and durable-outbox stages because their
+    fencing and transaction boundaries span those steps. Calendar I/O remains
+    in the separate executor. Seeded observations are only a test/demo input.
     """
 
     def __init__(
@@ -171,6 +166,37 @@ class SeededReconciliationWorkflow:
             )
         if observation.observation_type == ObservationType.COMPLETION_CONFIRMED:
             return await self._handle_completion_confirmed(request, observation)
+        if observation.observation_type in (
+            ObservationType.COMMITMENT_PAUSED,
+            ObservationType.COMMITMENT_DISMISSED,
+        ):
+            return await self._handle_commitment_suspended(request, observation)
+        if observation.observation_type in (
+            ObservationType.COMMITMENT_REOPENED,
+            ObservationType.COMMITMENT_RESUMED,
+            ObservationType.COMMITMENT_PRIORITY_CHANGED,
+        ):
+            lifecycle_reentry = observation.observation_type in (
+                ObservationType.COMMITMENT_REOPENED,
+                ObservationType.COMMITMENT_RESUMED,
+            )
+            repaired = await self._handle_calendar_repair(
+                request,
+                observation,
+                previous_plan=(
+                    await self._latest_published_plan(request.user_id)
+                    if lifecycle_reentry
+                    else None
+                ),
+                policy_override=lifecycle_reentry,
+            )
+            if repaired.error_code != "previous_plan_not_found":
+                return repaired
+            return await self._handle_portfolio_replan(
+                request,
+                observation,
+                observation.observation_type.value,
+            )
         if observation.observation_type == ObservationType.ACTION_RESULT:
             return await self._handle_action_result(request, observation)
         if observation.observation_type == ObservationType.CALENDAR_USER_MOVE_VALID:
@@ -473,6 +499,7 @@ class SeededReconciliationWorkflow:
                 policy_profile="default_personal",
                 created_at=now,
                 updated_at=now,
+                last_reconciled_at=now,
             )
             await repositories.commitments.save(commitment, None)
             await repositories.evidence.create(
@@ -615,6 +642,7 @@ class SeededReconciliationWorkflow:
             result.interpretation,
             {message.message_id: message.body_text for message in messages},
             frozenset(candidate.commitment_id for candidate in candidates),
+            deadline_timezone=self._controlled_timezone,
         )
         if validation.disposition == ModelValidationDisposition.REJECTED:
             await self._record_interpretation_rejected(request, observation, validation.error_codes)
@@ -789,7 +817,7 @@ class SeededReconciliationWorkflow:
                 confidence=proposal.deadline.confidence,
                 evidence_id=evidence_ids[0],
                 source_expression=proposal.deadline.source_expression,
-                rule_version="extraction_v2",
+                rule_version="deadline_normalization_v1",
             ),
             effort=Effort(
                 proposed_minutes=proposal.proposed_effort_minutes,
@@ -807,6 +835,7 @@ class SeededReconciliationWorkflow:
             policy_profile="default_personal",
             created_at=now,
             updated_at=now,
+            last_reconciled_at=now,
         )
         await repositories.commitments.save(commitment, None)
         durable: list[str] = [commitment_id, *evidence_ids]
@@ -895,7 +924,7 @@ class SeededReconciliationWorkflow:
                         confidence=proposal.deadline.confidence,
                         evidence_id=evidence_ids[0],
                         source_expression=proposal.deadline.source_expression,
-                        rule_version="extraction_v2",
+                        rule_version="deadline_normalization_v1",
                     ),
                 )
         if (
@@ -930,7 +959,12 @@ class SeededReconciliationWorkflow:
                 repositories, request, target, now
             )
             return (target.commitment_id, *evidence_ids, *reissued)
-        updated = replace(updated, revision=target.revision + 1, updated_at=now)
+        updated = replace(
+            updated,
+            revision=target.revision + 1,
+            updated_at=now,
+            last_reconciled_at=now,
+        )
         await repositories.commitments.save(updated, target.revision)
         durable: list[str] = [target.commitment_id, *evidence_ids]
         await repositories.activity.append(
@@ -1257,6 +1291,21 @@ class SeededReconciliationWorkflow:
 
         return await self._unit_of_work.read(_load)
 
+    async def _latest_published_plan(self, user_id: str) -> PortfolioPlan | None:
+        async def _load(repositories: RepositorySet) -> PortfolioPlan | None:
+            plans = await repositories.planner_runs.list_for_user(
+                user_id,
+                PlannerRunStatus.PUBLISHED.value,
+                25,
+            )
+            return max(
+                plans,
+                key=lambda plan: (plan.calculated_at, plan.planner_run_id),
+                default=None,
+            )
+
+        return await self._unit_of_work.read(_load)
+
     async def _handle_valid_calendar_move(
         self,
         request: ReconciliationRequest,
@@ -1462,8 +1511,20 @@ class SeededReconciliationWorkflow:
                     plan_diff,
                     set(recreate_work_block_ids),
                 )
-            policy = self._repair_policy.evaluate(plan_diff, repaired, preferences)
-            if policy_override or stale_resume:
+            ownership_valid = self._plan_differ.validate_owned_targets(
+                plan_diff,
+                {block.work_block_id for block in previous.work_blocks},
+            )
+            policy = self._repair_policy.evaluate(
+                plan_diff,
+                repaired,
+                preferences,
+                ownership_valid=ownership_valid,
+            )
+            if (
+                policy.disposition != RepairPolicyDisposition.FORBIDDEN
+                and (policy_override or stale_resume)
+            ):
                 policy = replace(
                     policy,
                     disposition=RepairPolicyDisposition.AUTOMATIC,
@@ -1645,6 +1706,16 @@ class SeededReconciliationWorkflow:
                 expected_plan_revision=updated_commitment.plan_revision,
                 expected_projection_hash=projection_hash(updated_commitment),
                 expected_control_epoch=controls.control_epoch,
+                before_state={
+                    "scheduled_start": snapshot.observed_start.isoformat()
+                    if snapshot.observed_start is not None
+                    else None,
+                    "scheduled_end": snapshot.observed_end.isoformat()
+                    if snapshot.observed_end is not None
+                    else None,
+                    "calendar_event_id": block.calendar_event_id,
+                    "observed_event_etag": snapshot.observed_event_etag,
+                },
                 mutation=CalendarMutation(
                     action_type=CalendarActionType.PATCH,
                     calendar_id=block.calendar_id,
@@ -2054,6 +2125,7 @@ class SeededReconciliationWorkflow:
                             "planner_run_id": published.planner_run_id,
                             "expected_revisions": dict(published.expected_revisions),
                             "commitment_order": list(published.commitment_order),
+                            "allocations": self._allocation_documents(published),
                             "proposed_blocks": proposed_blocks,
                         },
                         "continuation_type": "initial_plan_approval",
@@ -2340,6 +2412,20 @@ class SeededReconciliationWorkflow:
                     expected_plan_revision=plan_revision,
                     expected_projection_hash=projection_hash(target_commitment),
                     expected_control_epoch=controls.control_epoch,
+                    before_state={
+                        "scheduled_start": mutation.before.start.isoformat()
+                        if mutation.before is not None
+                        else None,
+                        "scheduled_end": mutation.before.end.isoformat()
+                        if mutation.before is not None
+                        else None,
+                        "calendar_event_id": work_block.calendar_event_id,
+                        "observed_event_etag": (
+                            snapshot.observed_event_etag
+                            if snapshot is not None
+                            else None
+                        ),
+                    },
                     mutation=CalendarMutation(
                         action_type=action_type,
                         calendar_id=self._calendar_id,
@@ -2603,10 +2689,42 @@ class SeededReconciliationWorkflow:
         if planning is None:
             return self._outcome(request, "rejected", (), "portfolio_planner_unavailable")
         now = self._clock.now()
+        if policy.disposition == RepairPolicyDisposition.FORBIDDEN:
+            async def _record_forbidden(repositories: RepositorySet) -> None:
+                await repositories.activity.append(
+                    self._activity_factory.create(
+                        user_id=request.user_id,
+                        event_type=ActivityEventType.POLICY_DECIDED,
+                        trace_id=request.trace_id,
+                        actor="reconciliation",
+                        summary="Calendar mutation refused by ownership policy",
+                        payload={
+                            "source_observation_id": observation.observation_id,
+                            "disposition": RepairPolicyDisposition.FORBIDDEN.value,
+                            "reason_codes": list(policy.reason_codes),
+                            "threshold_version": policy.threshold_version,
+                            "calendar_mutations_written": 0,
+                        },
+                        created_at=now,
+                    )
+                )
+
+            await self._unit_of_work.run_fenced(
+                request.processing_fence,
+                _record_forbidden,
+            )
+            return self._outcome(request, "rejected", (), "policy_forbidden")
         repair_blocked = self._repair_blocking_infeasibility(repaired)
         approval_required = (
             repair_blocked
             or policy.disposition == RepairPolicyDisposition.APPROVAL_REQUIRED
+        )
+        explanation = await self._explain_repair_decision(
+            observation,
+            plan_diff,
+            repaired,
+            policy,
+            approval_required,
         )
 
         if approval_required:
@@ -2650,8 +2768,12 @@ class SeededReconciliationWorkflow:
                             "reason_codes": list(policy.reason_codes),
                             "moved_block_count": policy.changed_block_count,
                             "maximum_shift_minutes": policy.maximum_shift_minutes,
+                            "total_displacement_minutes": (
+                                policy.total_displacement_minutes
+                            ),
                             "mutations": self._plan_mutation_documents(plan_diff),
                             "risk_arc": self._risk_arc(published),
+                            "explanation": explanation,
                         },
                         "continuation_type": "action_approval",
                         "policy_reason": (
@@ -2869,6 +2991,20 @@ class SeededReconciliationWorkflow:
                     expected_plan_revision=plan_revision,
                     expected_projection_hash=projection_hash(target_commitment),
                     expected_control_epoch=controls.control_epoch,
+                    before_state={
+                        "scheduled_start": mutation.before.start.isoformat()
+                        if mutation.before is not None
+                        else None,
+                        "scheduled_end": mutation.before.end.isoformat()
+                        if mutation.before is not None
+                        else None,
+                        "calendar_event_id": work_block.calendar_event_id,
+                        "observed_event_etag": (
+                            snapshot.observed_event_etag
+                            if snapshot is not None
+                            else None
+                        ),
+                    },
                     mutation=CalendarMutation(
                         action_type=action_type,
                         calendar_id=work_block.calendar_id,
@@ -2933,6 +3069,7 @@ class SeededReconciliationWorkflow:
                     ),
                     payload={
                         "source_observation_id": observation.observation_id,
+                        "source_observation_type": observation.observation_type.value,
                         "detected_at": observation.observed_at.isoformat(),
                         "decided_at": now.isoformat(),
                         "decision_latency_ms": max(
@@ -2951,17 +3088,12 @@ class SeededReconciliationWorkflow:
                         "preserved_work_block_ids": list(
                             plan_diff.preserved_work_block_ids
                         ),
+                        "commitment_order": list(published.commitment_order),
+                        "allocations": self._allocation_documents(published),
                         "risk_arc": risk_arc,
                         "outbox_ids": outbox_ids,
                         "undo_available": True,
-                        "explanation": {
-                            "why": observation.safe_metadata.get(
-                                "classification", observation.observation_type.value
-                            ),
-                            "before": self._plan_mutation_documents(plan_diff),
-                            "after_risk": risk_arc,
-                            "unchanged": list(plan_diff.preserved_work_block_ids),
-                        },
+                        "explanation": explanation,
                     },
                     created_at=now,
                 )
@@ -2981,6 +3113,9 @@ class SeededReconciliationWorkflow:
                         "threshold_version": policy.threshold_version,
                         "moved_block_count": policy.changed_block_count,
                         "maximum_shift_minutes": policy.maximum_shift_minutes,
+                        "total_displacement_minutes": (
+                            policy.total_displacement_minutes
+                        ),
                         "undo_available": True,
                         "outbox_ids": outbox_ids,
                         "adopted_work_block_ids": list(adopted_work_block_ids),
@@ -3002,6 +3137,63 @@ class SeededReconciliationWorkflow:
             except Exception:  # noqa: BLE001 - dispatch gap is repairable
                 pass
         return self._outcome(request, "processed", durable, None)
+
+    async def _explain_repair_decision(
+        self,
+        observation: ObservationV1,
+        plan_diff: PlanDiff,
+        repaired: PortfolioPlan,
+        policy: RepairPolicyDecision,
+        approval_required: bool,
+    ) -> Mapping[str, Any]:
+        fallback = (
+            f"The calendar change affected {plan_diff.moved_block_count} work block(s). "
+            + (
+                "The proposed repair is waiting for approval."
+                if approval_required
+                else "CommitmentOS applied the smallest policy-permitted repair."
+            )
+            + f" {len(plan_diff.preserved_work_block_ids)} block(s) stayed unchanged."
+        )
+        if self._model_interpreter is None:
+            return {"text": fallback, "source": "deterministic_fallback"}
+        decision = {
+            "observation_type": observation.observation_type.value,
+            "classification": str(
+                observation.safe_metadata.get(
+                    "classification", observation.observation_type.value
+                )
+            ),
+            "approval_required": approval_required,
+            "policy_disposition": policy.disposition.value,
+            "policy_reason_codes": list(policy.reason_codes),
+            "moved_block_count": plan_diff.moved_block_count,
+            "total_displacement_minutes": plan_diff.total_displacement_minutes,
+            "preserved_block_count": len(plan_diff.preserved_work_block_ids),
+            "portfolio_feasible": repaired.feasible,
+            "fallback_explanation": fallback,
+        }
+        evidence = tuple(
+            {
+                key: "" if value is None else str(value)
+                for key, value in document.items()
+            }
+            for document in self._plan_mutation_documents(plan_diff)
+        )
+        try:
+            text, metadata = await self._model_interpreter.explain_decision(
+                decision, evidence
+            )
+        except Exception:  # noqa: BLE001 - explanation is non-authoritative
+            return {"text": fallback, "source": "deterministic_fallback"}
+        return {
+            "text": text,
+            "source": "gemini",
+            "model_id": metadata.model_id,
+            "prompt_version": metadata.prompt_version,
+            "schema_version": metadata.schema_version,
+            "latency_ms": metadata.latency_ms,
+        }
 
     @staticmethod
     def _plan_mutation_documents(plan_diff: PlanDiff) -> list[dict[str, Any]]:
@@ -3042,6 +3234,151 @@ class SeededReconciliationWorkflow:
     # ------------------------------------------------------------------
     # Control change and action results
     # ------------------------------------------------------------------
+
+    async def _handle_commitment_suspended(
+        self,
+        request: ReconciliationRequest,
+        observation: ObservationV1,
+    ) -> ReconciliationOutcome:
+        """Release future Calendar capacity after an explicit pause or dismissal."""
+
+        now = self._clock.now()
+        commitment_id = str(observation.safe_metadata.get("commitment_id") or "")
+        expected_status = (
+            LifecycleStatus.PAUSED
+            if observation.observation_type == ObservationType.COMMITMENT_PAUSED
+            else LifecycleStatus.DISMISSED
+        )
+        outbox_ids: list[str] = []
+
+        async def _cancel(repositories: RepositorySet) -> tuple[str, ...]:
+            commitment = await repositories.commitments.get(commitment_id)
+            if commitment is None or commitment.lifecycle_status != expected_status:
+                return ()
+            controls = await repositories.system_controls.get(request.user_id)
+            canceled_ids: list[str] = []
+            missing_snapshot_ids: list[str] = []
+            for block in await repositories.work_blocks.list_for_commitment(
+                commitment_id
+            ):
+                if block.execution_state != WorkBlockExecutionState.PLANNED:
+                    continue
+                canceled = block.cancel(now)
+                await repositories.work_blocks.save(canceled, block.revision)
+                canceled_ids.append(block.work_block_id)
+                snapshot = await repositories.calendar_snapshots.get(
+                    block.calendar_id,
+                    block.calendar_event_id,
+                )
+                if (
+                    snapshot is None
+                    or snapshot.is_tombstone
+                    or snapshot.observed_event_etag is None
+                ):
+                    missing_snapshot_ids.append(block.work_block_id)
+                    continue
+                action_key = self._action_keys.derive(
+                    commitment_id,
+                    commitment.plan_revision,
+                    CalendarActionType.CANCEL,
+                    block.work_block_id,
+                )
+                outbox_id = CanonicalEncoder.hash(["outbox:v1", action_key])
+                if await repositories.outbox.get(outbox_id) is None:
+                    await repositories.outbox.create(
+                        ActionOutbox(
+                            outbox_id=outbox_id,
+                            user_id=request.user_id,
+                            commitment_id=commitment_id,
+                            work_block_id=block.work_block_id,
+                            action_idempotency_key=action_key,
+                            expected_commitment_revision=commitment.revision,
+                            expected_plan_revision=commitment.plan_revision,
+                            expected_projection_hash="",
+                            expected_control_epoch=controls.control_epoch,
+                            before_state={
+                                "scheduled_start": block.scheduled_start.isoformat(),
+                                "scheduled_end": block.scheduled_end.isoformat(),
+                                "calendar_event_id": block.calendar_event_id,
+                                "observed_event_etag": snapshot.observed_event_etag,
+                            },
+                            mutation=CalendarMutation(
+                                action_type=CalendarActionType.CANCEL,
+                                calendar_id=block.calendar_id,
+                                calendar_event_id=block.calendar_event_id,
+                                work_block_id=block.work_block_id,
+                                desired_start=block.scheduled_start,
+                                desired_end=block.scheduled_end,
+                                expected_observed_event_etag=(
+                                    snapshot.observed_event_etag
+                                ),
+                                private_properties={
+                                    "managed_by": "commitmentos",
+                                    "commitment_id": commitment_id,
+                                    "work_block_id": block.work_block_id,
+                                    "plan_revision": str(commitment.plan_revision),
+                                },
+                            ),
+                            dispatch_status=DispatchStatus.PENDING,
+                            execution_status=ExecutionStatus.PENDING,
+                            claim_token=None,
+                            claim_lease_expires_at=None,
+                            attempts=0,
+                            mutation_response=None,
+                            error=None,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                outbox_ids.append(outbox_id)
+            await repositories.activity.append(
+                self._activity_factory.create(
+                    user_id=request.user_id,
+                    event_type=(
+                        ActivityEventType.COMMITMENT_PAUSED
+                        if expected_status == LifecycleStatus.PAUSED
+                        else ActivityEventType.COMMITMENT_DISMISSED
+                    ),
+                    trace_id=request.trace_id,
+                    actor="reconciliation",
+                    summary="Future work blocks released from the active portfolio",
+                    payload={
+                        "source_observation_id": observation.observation_id,
+                        "commitment_id": commitment_id,
+                        "target_status": expected_status.value,
+                        "future_blocks_canceled": canceled_ids,
+                        "cancel_outbox_ids": list(outbox_ids),
+                        "blocks_waiting_for_calendar_truth": missing_snapshot_ids,
+                    },
+                    created_at=now,
+                )
+            )
+            return (observation.observation_id, *canceled_ids)
+
+        durable = await self._unit_of_work.run_fenced(
+            request.processing_fence,
+            _cancel,
+        )
+        if not durable:
+            return self._outcome(request, "ignored", (), "suspension_target_changed")
+        for outbox_id in outbox_ids:
+            try:
+                await self._outbox_dispatcher.dispatch(outbox_id)
+            except Exception:  # noqa: BLE001 - durable outbox repairs enqueue gaps
+                pass
+        if self._portfolio_planning is None:
+            return self._outcome(request, "processed", durable, None)
+        replanned = await self._handle_portfolio_replan(
+            request,
+            observation,
+            observation.observation_type.value,
+        )
+        return self._outcome(
+            request,
+            "processed",
+            tuple(dict.fromkeys((*durable, *replanned.durable_outcome_ids))),
+            replanned.error_code,
+        )
 
     async def _handle_completion_confirmed(
         self,
@@ -3126,6 +3463,12 @@ class SeededReconciliationWorkflow:
                     # still protect this cancel.
                     expected_projection_hash="",
                     expected_control_epoch=controls.control_epoch,
+                    before_state={
+                        "scheduled_start": block.scheduled_start.isoformat(),
+                        "scheduled_end": block.scheduled_end.isoformat(),
+                        "calendar_event_id": block.calendar_event_id,
+                        "observed_event_etag": snapshot.observed_event_etag,
+                    },
                     mutation=CalendarMutation(
                         action_type=CalendarActionType.CANCEL,
                         calendar_id=block.calendar_id,
@@ -3301,6 +3644,8 @@ class SeededReconciliationWorkflow:
                                 "planner_run_id"
                             ),
                             "planner_run_id": published.planner_run_id,
+                            "commitment_order": list(published.commitment_order),
+                            "allocations": self._allocation_documents(published),
                             "reason": reason,
                             "mode": "replan_from_current_facts",
                             "calendar_mutations_written": 0,
@@ -3327,7 +3672,36 @@ class SeededReconciliationWorkflow:
             observation.safe_metadata.get("control_name") == "automatic_actions"
             and observation.safe_metadata.get("target_mode") == ControlMode.ENABLED.value
         ):
-            await self._outbox_dispatcher.release_held(request.user_id, 50)
+            summary = await self._outbox_dispatcher.release_held(request.user_id, 50)
+            now = self._clock.now()
+
+            async def _record(repositories: RepositorySet) -> None:
+                await repositories.activity.append(
+                    self._activity_factory.create(
+                        user_id=request.user_id,
+                        event_type=ActivityEventType.CONTROL_CHANGED,
+                        trace_id=request.trace_id,
+                        actor="outbox_dispatcher",
+                        summary="Held Calendar actions revalidated after resume",
+                        payload={
+                            "control_name": "automatic_actions",
+                            "control_epoch": observation.safe_metadata.get(
+                                "control_epoch"
+                            ),
+                            "held_actions_scanned": summary.scanned,
+                            "actions_reissued": summary.queued,
+                            "actions_superseded": summary.superseded,
+                            "resume_revalidation_result": (
+                                "reissued_current_intent"
+                                if summary.queued
+                                else "no_current_intent_to_release"
+                            ),
+                        },
+                        created_at=now,
+                    )
+                )
+
+            await self._unit_of_work.run_fenced(request.processing_fence, _record)
         return self._outcome(request, "processed", (observation.observation_id,), None)
 
     async def _handle_action_result(
@@ -3410,6 +3784,24 @@ class SeededReconciliationWorkflow:
         return CanonicalEncoder.hash(
             ["approval:v1", commitment_id, request_type, str(commitment_revision)]
         )
+
+    @staticmethod
+    def _allocation_documents(plan: PortfolioPlan) -> list[dict[str, Any]]:
+        return [
+            {
+                "commitment_id": allocation.commitment_id,
+                "allocated_work_minutes": allocation.allocated_work_minutes,
+                "shortfall_minutes": allocation.shortfall_minutes,
+                "shared_buffer_minutes": allocation.portfolio_slack_minutes,
+                "projected_finish": (
+                    allocation.projected_finish.isoformat()
+                    if allocation.projected_finish is not None
+                    else None
+                ),
+                "risk_level": allocation.risk_level.value,
+            }
+            for allocation in plan.allocations
+        ]
 
     @staticmethod
     def _outcome(

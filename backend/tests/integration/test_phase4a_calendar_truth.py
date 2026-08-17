@@ -274,6 +274,8 @@ class TestCalendarWebhookIngress:
             "channel_id": "channel-bootstrap",
             "resource_id": "resource-bootstrap",
             "token_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "expiration": app.clock.now() + timedelta(days=1),
+            "status": "active",
         }
         router = CalendarWebhookRouter(
             CalendarChannelVerifier(app.uow, app.clock, 20, 60),
@@ -346,6 +348,8 @@ class TestCalendarWebhookIngress:
             "channel_id": "channel-1",
             "resource_id": "resource-1",
             "token_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "expiration": app.clock.now() + timedelta(days=1),
+            "status": "active",
         }
         router = CalendarWebhookRouter(
             CalendarChannelVerifier(app.uow, app.clock, 20, 60),
@@ -379,6 +383,8 @@ class TestCalendarWebhookIngress:
             "channel_id": "channel-1",
             "resource_id": "resource-1",
             "token_hash": hashlib.sha256(b"expected").hexdigest(),
+            "expiration": app.clock.now() + timedelta(days=1),
+            "status": "active",
         }
         verifier = CalendarChannelVerifier(app.uow, app.clock, 20, 60)
         with pytest.raises(ValueError):
@@ -395,6 +401,35 @@ class TestCalendarWebhookIngress:
             )
         assert "calendar_channel_rate_limits" not in app.store
         assert "sync_requests" not in app.store
+
+    async def test_expired_or_inactive_channel_is_rejected_before_rate_limit(
+        self, app: Phase1App
+    ) -> None:
+        token = "calendar-channel-secret"
+        channel = {
+            "user_id": CONTROLLED_USER,
+            "calendar_id": CALENDAR_ID,
+            "channel_id": "expired-channel",
+            "resource_id": "expired-resource",
+            "token_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "expiration": app.clock.now() - timedelta(seconds=1),
+            "status": "active",
+        }
+        app.store.setdefault("calendar_channels", {})[CONTROLLED_USER] = channel
+        verifier = CalendarChannelVerifier(app.uow, app.clock, 20, 60)
+        headers = {
+            "X-Goog-Channel-ID": "expired-channel",
+            "X-Goog-Resource-ID": "expired-resource",
+            "X-Goog-Channel-Token": token,
+            "X-Goog-Message-Number": "1",
+        }
+        with pytest.raises(ValueError, match="expired channel"):
+            await verifier.verify("POST", headers, b"")
+        channel["expiration"] = app.clock.now() + timedelta(days=1)
+        channel["status"] = "retired"
+        with pytest.raises(ValueError, match="inactive channel"):
+            await verifier.verify("POST", headers, b"")
+        assert "calendar_channel_rate_limits" not in app.store
 
     async def test_maintenance_renews_channel_with_overlap_metadata(
         self, app: Phase1App

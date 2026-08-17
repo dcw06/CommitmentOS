@@ -89,12 +89,11 @@ class ProjectionGuard:
             commitment,
             work_blocks,
         )
-        if not commitment.effort.confirmed_minutes:
-            blocking = BlockingStatus.WAITING
-        elif allocation.shortfall_minutes > 0:
-            blocking = BlockingStatus.BLOCKED
-        else:
-            blocking = BlockingStatus.CLEAR
+        # `blocking_status` is reserved for a person/dependency that prevents
+        # progress. Effort confirmation and portfolio shortfall already have
+        # dedicated fields and risk states; reusing waiting/blocked for them
+        # made the UI report a dependency that did not exist.
+        blocking = BlockingStatus.CLEAR
         return CommitmentProjection(
             verified_completed_minutes=verified,
             remaining_minutes=remaining,

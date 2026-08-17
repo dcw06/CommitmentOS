@@ -114,6 +114,8 @@ class CommitmentSerializer:
             "plan_revision": value.plan_revision,
             "projection": None,
             "policy_profile": value.policy_profile,
+            "explicit_priority": value.explicit_priority,
+            "last_reconciled_at": value.last_reconciled_at,
             "created_at": value.created_at,
             "updated_at": value.updated_at,
         }
@@ -181,6 +183,8 @@ class CommitmentSerializer:
             policy_profile=value["policy_profile"],
             created_at=_require_utc(value["created_at"]),
             updated_at=_require_utc(value["updated_at"]),
+            explicit_priority=int(value.get("explicit_priority", 0)),
+            last_reconciled_at=_utc(value.get("last_reconciled_at")),
         )
 
 
@@ -285,6 +289,9 @@ class ActionOutboxSerializer:
             "expected_plan_revision": value.expected_plan_revision,
             "expected_projection_hash": value.expected_projection_hash,
             "expected_control_epoch": value.expected_control_epoch,
+            "before_state": (
+                dict(value.before_state) if value.before_state is not None else None
+            ),
             "mutation": {
                 "action_type": value.mutation.action_type.value,
                 "calendar_id": value.mutation.calendar_id,
@@ -337,6 +344,11 @@ class ActionOutboxSerializer:
             expected_plan_revision=value["expected_plan_revision"],
             expected_projection_hash=value["expected_projection_hash"],
             expected_control_epoch=value["expected_control_epoch"],
+            before_state=(
+                dict(value["before_state"])
+                if value.get("before_state") is not None
+                else None
+            ),
             mutation=CalendarMutation(
                 action_type=CalendarActionType(mutation_data["action_type"]),
                 calendar_id=mutation_data["calendar_id"],

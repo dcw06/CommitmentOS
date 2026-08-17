@@ -131,6 +131,7 @@ def webhook(app: Phase1App) -> tuple[CalendarWebhookRouter, dict[str, str]]:
         "resource_id": "phase4c-resource",
         "token_hash": hashlib.sha256(token.encode()).hexdigest(),
         "expiration": app.clock.now() + timedelta(days=1),
+        "status": "active",
     }
     router = CalendarWebhookRouter(
         CalendarChannelVerifier(app.uow, app.clock, 20, 60),
@@ -152,6 +153,19 @@ def webhook(app: Phase1App) -> tuple[CalendarWebhookRouter, dict[str, str]]:
 
 
 class TestPeriodicSafety:
+    async def test_infeasible_plan_surfaces_portfolio_capacity_conflict(
+        self, app: Phase1App
+    ) -> None:
+        await create_live_plan(app)
+        latest = max(
+            app.store["planner_runs"].values(),
+            key=lambda row: row["calculated_at"],
+        )
+        latest["feasible"] = False
+        status = await GetSystemStatus(app.uow, app.clock).execute(CONTROLLED_USER)
+        states = {item["state"] for item in status.failure_states}
+        assert {"no_feasible_plan", "portfolio_capacity_conflict"}.issubset(states)
+
     async def test_scan_drives_real_block_lifecycle_without_inventing_progress(
         self, app: Phase1App
     ) -> None:

@@ -62,14 +62,34 @@ export interface ControlsState {
   inFlightActions: number;
 }
 
+export interface CandidateView {
+  commitmentId: string;
+  title: string;
+  ownershipType: string;
+  lifecycleStatus: string;
+  deadline: string;
+  confidence: number | null;
+}
+
 export interface TodayView {
   localDate: string;
   blocks: TodayBlock[];
+  candidates: CandidateView[];
   atRisk: AtRiskItem[];
   approvals: PendingApproval[];
   failures: FailureState[];
   outcome: OutcomeStat[];
   controls: ControlsState | null;
+}
+
+export interface PortfolioView {
+  plannerRunId: string;
+  position: number;
+  size: number;
+  allocatedMinutes: number;
+  projectedFinish: string | null;
+  shortfallMinutes: number;
+  sharedBufferMinutes: number;
 }
 
 export interface CommitmentSummary {
@@ -82,6 +102,8 @@ export interface CommitmentSummary {
   remainingMinutes: number | null;
   confirmedMinutes: number | null;
   verifiedMinutes: number | null;
+  blockingStatus: string;
+  portfolio: PortfolioView | null;
 }
 
 export interface WorkBlockView {
@@ -106,9 +128,11 @@ export interface CommitmentDetail {
   deadlineSourceExpression: string;
   deadlineConfidence: number | null;
   beneficiary: string;
+  explicitPriority: number;
   evidence: EvidenceView[];
   workBlocks: WorkBlockView[];
   activity: ActivityItem[];
+  approvals: PendingApproval[];
 }
 
 export interface ActivityItem {
@@ -116,6 +140,8 @@ export interface ActivityItem {
   summary: string;
   actor: string;
   createdAt: string | null;
+  traceId: string;
+  payload: Record<string, unknown>;
 }
 
 export interface ActivityPage {
@@ -223,20 +249,18 @@ function list(value: unknown): Record<string, unknown>[] {
 export async function fetchToday(): Promise<TodayView> {
   if (DEMO_MODE) return demoToday();
 
-  const [todayRaw, statusRaw, activityRaw] = await Promise.all([
+  const [todayRaw, statusRaw] = await Promise.all([
     getJson(`/api/v1/dashboard/today?timezone=${encodeURIComponent(LOCAL_TIMEZONE)}`),
     getJson("/api/v1/dashboard/system-status"),
-    getJson("/api/v1/dashboard/activity?limit=100"),
   ]);
   const today = record(todayRaw);
   const status = record(statusRaw);
   const controls = record(status.controls);
-  const activityItems = list(record(activityRaw).items);
 
   const blocks: TodayBlock[] = list(today.work_blocks).map((block) => ({
     workBlockId: str(block.work_block_id),
     commitmentId: str(block.commitment_id),
-    title: "",
+    title: str(block.title),
     start: str(block.scheduled_start),
     end: str(block.scheduled_end),
     executionState: str(block.execution_state),
@@ -244,16 +268,19 @@ export async function fetchToday(): Promise<TodayView> {
     durationMinutes: num(block.duration_minutes),
   }));
 
-  const repairs = activityItems.filter(
-    (item) => str(item.event_type) === "plan_repaired",
-  ).length;
-  const reservedToday = blocks
-    .filter((b) => b.executionState === "planned" || b.executionState === "active")
-    .reduce((total, b) => total + (b.durationMinutes ?? 0), 0);
+  const strip = record(today.outcome_strip);
 
   return {
     localDate: str(today.local_date),
     blocks,
+    candidates: list(today.newly_detected_candidates).map((item) => ({
+      commitmentId: str(item.commitment_id),
+      title: str(item.title),
+      ownershipType: str(item.ownership_type),
+      lifecycleStatus: str(item.lifecycle_status),
+      deadline: str(item.deadline),
+      confidence: num(item.deadline_confidence),
+    })),
     atRisk: list(today.at_risk_commitments).map((item) => ({
       commitmentId: str(item.commitment_id),
       title: str(item.title),
@@ -274,10 +301,11 @@ export async function fetchToday(): Promise<TodayView> {
       return { state: str(state), details };
     }),
     outcome: [
-      { label: "Minutes reserved today", value: reservedToday },
-      { label: "Conflicts repaired (recent)", value: repairs },
-      { label: "Pending decisions", value: num(status.pending_decision_count) ?? 0 },
-      { label: "Held actions", value: num(status.held_action_count) ?? 0 },
+      { label: "Commitments kept feasible", value: num(strip.commitments_kept_feasible) ?? 0 },
+      { label: "Work minutes reserved", value: num(strip.work_minutes_reserved) ?? 0 },
+      { label: "Conflicts repaired automatically", value: num(strip.conflicts_repaired_automatically) ?? 0 },
+      { label: "Unaffected blocks preserved", value: num(strip.unaffected_blocks_preserved) ?? 0 },
+      { label: "Manual reschedules avoided", value: num(strip.manual_reschedules_avoided) ?? 0 },
     ],
     controls: {
       observationMode: str(controls.observation_mode, "unknown"),
@@ -305,6 +333,7 @@ async function demoToday(): Promise<TodayView> {
       verifiedMinutes: 0,
       durationMinutes: null,
     })),
+    candidates: [],
     atRisk: list(today.at_risk).map((item) => ({
       commitmentId: "",
       title: str(item.commitment_title ?? item.title),
@@ -335,6 +364,10 @@ async function demoToday(): Promise<TodayView> {
         label: "Unaffected blocks preserved",
         value: num(strip.unaffected_blocks_preserved) ?? 0,
       },
+      {
+        label: "Manual reschedules avoided",
+        value: num(strip.manual_reschedules_avoided) ?? 0,
+      },
     ],
     controls: {
       observationMode: str(monitoring.observation_mode, "active"),
@@ -362,11 +395,14 @@ export async function fetchCommitments(): Promise<CommitmentSummary[]> {
       remainingMinutes: num(item.remaining_minutes),
       confirmedMinutes: num(item.confirmed_minutes),
       verifiedMinutes: num(item.verified_completed_minutes),
+      blockingStatus: str(item.blocking_status, "clear"),
+      portfolio: portfolio(record(item.portfolio)),
     }));
   }
   const page = record(await getJson("/api/v1/commitments?limit=50"));
   return list(page.items).map((item) => {
     const projection = record(item.projection);
+    const projectionCurrent = projection.current !== false;
     const deadline = record(item.deadline);
     return {
       commitmentId: str(item.commitment_id),
@@ -374,10 +410,16 @@ export async function fetchCommitments(): Promise<CommitmentSummary[]> {
       ownershipType: str(item.ownership_type),
       lifecycleStatus: str(item.lifecycle_status),
       deadline: str(deadline.value ?? item.deadline) || null,
-      riskLevel: str(projection.risk_level ?? item.risk_level, "unknown"),
-      remainingMinutes: num(projection.remaining_minutes ?? item.remaining_minutes),
+      riskLevel: projectionCurrent
+        ? str(projection.risk_level ?? item.risk_level, "unknown")
+        : "unknown",
+      remainingMinutes: projectionCurrent
+        ? num(projection.remaining_minutes ?? item.remaining_minutes)
+        : null,
       confirmedMinutes: num(record(item.effort).confirmed_minutes),
       verifiedMinutes: null,
+      blockingStatus: str(projection.blocking_status, "clear"),
+      portfolio: portfolio(record(item.portfolio)),
     };
   });
 }
@@ -400,11 +442,14 @@ export async function fetchCommitmentDetail(
         remainingMinutes: num(item.remaining_minutes),
         confirmedMinutes: num(item.confirmed_minutes),
         verifiedMinutes: num(item.verified_completed_minutes),
+        blockingStatus: str(item.blocking_status, "clear"),
+        portfolio: portfolio(record(item.portfolio)),
       },
       revision: 0,
       deadlineSourceExpression: str(item.deadline_source_expression),
       deadlineConfidence: num(item.deadline_confidence),
       beneficiary: str(item.beneficiary),
+      explicitPriority: num(item.explicit_priority) ?? 0,
       evidence: (Array.isArray(item.evidence_excerpts) ? item.evidence_excerpts : [])
         .map((excerpt) => ({ excerpt: str(excerpt), confidence: null })),
       workBlocks: list(item.work_blocks).map((block, blockIndex) => ({
@@ -417,6 +462,7 @@ export async function fetchCommitmentDetail(
         note: str(block.note) || undefined,
       })),
       activity: [],
+      approvals: [],
     };
   }
 
@@ -424,6 +470,8 @@ export async function fetchCommitmentDetail(
   const commitment = record(detail.commitment);
   const deadline = record(commitment.deadline);
   const effort = record(commitment.effort);
+  const projection = record(commitment.projection);
+  const projectionCurrent = projection.current !== false;
   const workBlocks = list(detail.work_blocks).map((block) => ({
     workBlockId: str(block.work_block_id),
     scheduledStart: str(block.scheduled_start),
@@ -441,15 +489,22 @@ export async function fetchCommitmentDetail(
       ownershipType: str(commitment.ownership_type),
       lifecycleStatus: str(commitment.lifecycle_status),
       deadline: str(deadline.value) || null,
-      riskLevel: "unknown",
-      remainingMinutes: null,
+      riskLevel: projectionCurrent ? str(projection.risk_level, "unknown") : "unknown",
+      remainingMinutes: projectionCurrent ? num(projection.remaining_minutes) : null,
       confirmedMinutes: num(effort.confirmed_minutes),
-      verifiedMinutes: verified,
+      verifiedMinutes: projectionCurrent
+        ? num(projection.verified_completed_minutes) ?? verified
+        : verified,
+      blockingStatus: projectionCurrent
+        ? str(projection.blocking_status, "clear")
+        : "unknown",
+      portfolio: portfolio(record(detail.portfolio)),
     },
     revision: num(commitment.revision) ?? 0,
     deadlineSourceExpression: str(deadline.source_expression),
     deadlineConfidence: num(deadline.confidence),
     beneficiary: str(commitment.beneficiary),
+    explicitPriority: num(commitment.explicit_priority) ?? 0,
     evidence: list(detail.evidence).map((item) => ({
       excerpt: str(item.excerpt),
       confidence: num(item.confidence),
@@ -460,7 +515,10 @@ export async function fetchCommitmentDetail(
       summary: str(event.summary),
       actor: str(event.actor),
       createdAt: str(event.created_at) || null,
+      traceId: str(event.trace_id),
+      payload: record(event.payload),
     })),
+    approvals: list(detail.pending_approvals).map(approval),
   };
 }
 
@@ -477,6 +535,8 @@ export async function fetchActivity(cursor: string | null): Promise<ActivityPage
         summary: str(item.summary),
         actor: "seeded",
         createdAt: null,
+        traceId: "",
+        payload: item,
       })),
       nextCursor: null,
     };
@@ -489,6 +549,8 @@ export async function fetchActivity(cursor: string | null): Promise<ActivityPage
       summary: str(item.summary),
       actor: str(item.actor),
       createdAt: str(item.created_at) || null,
+      traceId: str(item.trace_id),
+      payload: record(item.payload),
     })),
     nextCursor: str(page.next_cursor) || null,
   };
@@ -553,6 +615,74 @@ export async function completeCommitment(
     note: note || null,
     expected_revision: expectedRevision,
   });
+}
+
+export async function reopenCommitment(
+  commitmentId: string,
+  expectedRevision: number,
+): Promise<void> {
+  await postJson(`/api/v1/commitments/${commitmentId}/reopen`, {
+    expected_revision: expectedRevision,
+  });
+}
+
+export async function setCommitmentPriority(
+  commitmentId: string,
+  expectedRevision: number,
+  priority: number,
+): Promise<void> {
+  await postJson(`/api/v1/commitments/${commitmentId}/priority`, {
+    expected_revision: expectedRevision,
+    priority,
+  });
+}
+
+export async function changeCommitmentLifecycle(
+  commitmentId: string,
+  expectedRevision: number,
+  targetStatus: "paused" | "active" | "dismissed",
+): Promise<void> {
+  await postJson(`/api/v1/commitments/${commitmentId}/lifecycle`, {
+    expected_revision: expectedRevision,
+    target_status: targetStatus,
+  });
+}
+
+export async function fetchSystemStatus(): Promise<ControlsState> {
+  const status = record(await getJson("/api/v1/dashboard/system-status"));
+  const controls = record(status.controls);
+  return {
+    observationMode: str(controls.observation_mode, "unknown"),
+    automaticActionMode: str(controls.automatic_action_mode, "unknown"),
+    controlEpoch: num(controls.control_epoch) ?? 0,
+    heldActions: num(status.held_action_count) ?? 0,
+    inFlightActions: num(status.in_flight_action_count) ?? 0,
+  };
+}
+
+function approval(item: Record<string, unknown>): PendingApproval {
+  return {
+    approvalId: str(item.approval_id),
+    commitmentId: str(item.commitment_id),
+    requestType: str(item.request_type),
+    revision: num(item.revision) ?? 0,
+    createdAt: str(item.created_at),
+    payload: record(item.payload),
+  };
+}
+
+function portfolio(item: Record<string, unknown>): PortfolioView | null {
+  const plannerRunId = str(item.planner_run_id);
+  if (!plannerRunId) return null;
+  return {
+    plannerRunId,
+    position: num(item.portfolio_position) ?? 0,
+    size: num(item.portfolio_size) ?? 0,
+    allocatedMinutes: num(item.allocated_work_minutes) ?? 0,
+    projectedFinish: str(item.projected_finish) || null,
+    shortfallMinutes: num(item.shortfall_minutes) ?? 0,
+    sharedBufferMinutes: num(item.shared_buffer_minutes) ?? 0,
+  };
 }
 
 export async function changeControl(

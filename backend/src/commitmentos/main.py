@@ -26,6 +26,7 @@ from commitmentos.bootstrap.settings import Settings
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings if settings is not None else Settings.load()
+    resolved.validate_live_mode_guards()
     LoggingConfigurator("commitmentos", resolved.environment.value).configure()
     app = FastAPI(
         title="CommitmentOS",
@@ -72,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(
         CompletionRouter(
             controlled.complete_commitment,
+            controlled.change_commitment,
             identity.session,
             identity.csrf,
         ).build()

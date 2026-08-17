@@ -6,8 +6,10 @@ from typing import Any, Mapping
 
 from commitmentos.application.ports.clock import Clock
 from commitmentos.application.ports.unit_of_work import RepositorySet, UnitOfWork
+from commitmentos.contracts.observations import ReconciliationStatus
 from commitmentos.contracts.tasks import SourceType
 from commitmentos.domain.actions.models import ExecutionStatus
+from commitmentos.domain.audit.models import ActivityEventType
 from commitmentos.domain.commitments.models import RiskLevel
 from commitmentos.domain.controls.models import ControlMode, SystemControls
 from commitmentos.domain.planning.models import PlannerRunStatus
@@ -52,6 +54,15 @@ class GetSystemStatus:
             held_observations = tuple(
                 await repositories.observations.list_held(user_id, STATUS_SCAN_LIMIT)
             )
+            retrying_observations = tuple(
+                await repositories.observations.list_for_statuses(
+                    user_id,
+                    (
+                        ReconciliationStatus.RETRYABLE_FAILED.value,
+                    ),
+                    STATUS_SCAN_LIMIT,
+                )
+            )
             pending_actions = tuple(
                 await repositories.outbox.list_for_user_statuses(
                     user_id,
@@ -83,6 +94,7 @@ class GetSystemStatus:
                     user_id,
                     (
                         ExecutionStatus.ACTION_IN_FLIGHT.value,
+                        ExecutionStatus.RETRYABLE_FAILED.value,
                         ExecutionStatus.TERMINAL_FAILED.value,
                         ExecutionStatus.STALE.value,
                         ExecutionStatus.STALE_PRECONDITION.value,
@@ -120,6 +132,11 @@ class GetSystemStatus:
                 )
             )
             commitments = tuple(await repositories.commitments.list_active(user_id))
+            recent_activity = tuple(
+                await repositories.activity.list_for_user(
+                    user_id, None, STATUS_SCAN_LIMIT
+                )
+            )
 
             failures: list[Mapping[str, Any]] = []
 
@@ -181,6 +198,13 @@ class GetSystemStatus:
                     "reconciliation_held_by_control",
                     observation_id=observation.observation_id,
                 )
+            for observation in retrying_observations:
+                add(
+                    "reconciliation_retrying",
+                    observation_id=observation.observation_id,
+                    processing_attempt=observation.processing_attempt,
+                    reconciliation_status=observation.reconciliation_status.value,
+                )
             for action in held_actions:
                 add(
                     "action_held_by_control",
@@ -190,6 +214,7 @@ class GetSystemStatus:
             for action in action_failures:
                 state = {
                     ExecutionStatus.ACTION_IN_FLIGHT: "action_in_flight",
+                    ExecutionStatus.RETRYABLE_FAILED: "calendar_action_retrying",
                     ExecutionStatus.TERMINAL_FAILED: "calendar_action_failed",
                     ExecutionStatus.STALE: "action_stale",
                     ExecutionStatus.STALE_PRECONDITION: "calendar_precondition_stale",
@@ -199,6 +224,21 @@ class GetSystemStatus:
                     outbox_id=action.outbox_id,
                     work_block_id=action.work_block_id,
                     error=dict(action.error or {}),
+                    attempts=action.attempts,
+                )
+            if any(
+                event.event_type == ActivityEventType.INTERPRETATION_REJECTED
+                for event in recent_activity
+            ):
+                latest_rejection = next(
+                    event
+                    for event in recent_activity
+                    if event.event_type == ActivityEventType.INTERPRETATION_REJECTED
+                )
+                add(
+                    "model_output_rejected",
+                    activity_event_id=latest_rejection.activity_event_id,
+                    occurred_at=latest_rejection.created_at.isoformat(),
                 )
             for approval in approvals:
                 request_type = str(approval.get("request_type") or "")
@@ -226,6 +266,10 @@ class GetSystemStatus:
             if recent_plans and not recent_plans[0].feasible:
                 add(
                     "no_feasible_plan",
+                    planner_run_id=recent_plans[0].planner_run_id,
+                )
+                add(
+                    "portfolio_capacity_conflict",
                     planner_run_id=recent_plans[0].planner_run_id,
                 )
             for commitment in commitments:

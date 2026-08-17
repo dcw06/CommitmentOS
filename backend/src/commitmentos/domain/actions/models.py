@@ -79,6 +79,7 @@ class ActionOutbox:
     expected_plan_revision: int
     expected_projection_hash: str
     expected_control_epoch: int
+    before_state: Mapping[str, Any] | None
     mutation: CalendarMutation
     dispatch_status: DispatchStatus
     execution_status: ExecutionStatus

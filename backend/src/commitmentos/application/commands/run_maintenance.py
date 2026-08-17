@@ -210,6 +210,7 @@ class RunMaintenance:
                     "resource_id": watch.resource_id,
                     "resource_uri": watch.resource_uri,
                     "expiration": watch.expiration,
+                    "status": "active",
                     "token_hash": watch.token_hash,
                     "registered_at": now,
                     "previous_channel_id": (
@@ -218,6 +219,10 @@ class RunMaintenance:
                     "previous_resource_id": (
                         previous.get("resource_id") if previous else None
                     ),
+                    "previous_expiration": (
+                        previous.get("expiration") if previous else None
+                    ),
+                    "previous_status": "overlap" if previous else None,
                     "renewed_at": now,
                 },
             )

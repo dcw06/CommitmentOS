@@ -10,11 +10,13 @@ from commitmentos.application.ports.clock import Clock
 from commitmentos.application.ports.unit_of_work import RepositorySet, UnitOfWork
 from commitmentos.application.services.observation_dispatcher import ObservationDispatcher
 from commitmentos.contracts.observations import ObservationFactory, ObservationType
+from commitmentos.domain.actions.models import ExecutionStatus
 from commitmentos.domain.audit.models import ActivityEventFactory, ActivityEventType
 from commitmentos.domain.controls.models import ControlMode, SystemControls
 from commitmentos.domain.shared.errors import DomainError
 
 CONTROL_NAMES = {"monitoring", "automatic_actions"}
+CONTROL_ACTIVITY_SCAN_LIMIT = 250
 
 
 class ChangeSystemControl:
@@ -61,6 +63,22 @@ class ChangeSystemControl:
                     error_code="control_epoch_conflict",
                 )
             updated = self._apply_change(controls, request, actor.user_id, target_mode, now)
+            held_actions = tuple(
+                await repositories.outbox.list_held(
+                    actor.user_id, CONTROL_ACTIVITY_SCAN_LIMIT
+                )
+            )
+            in_flight_actions = tuple(
+                await repositories.outbox.list_for_user_statuses(
+                    actor.user_id,
+                    (
+                        ExecutionStatus.CLAIMED.value,
+                        ExecutionStatus.ACTION_IN_FLIGHT.value,
+                        ExecutionStatus.EXTERNAL_VERIFICATION_PENDING.value,
+                    ),
+                    CONTROL_ACTIVITY_SCAN_LIMIT,
+                )
+            )
             await repositories.system_controls.save(updated, controls.control_epoch)
             await repositories.activity.append(
                 self._activity_factory.create(
@@ -75,6 +93,8 @@ class ChangeSystemControl:
                         "reason": request.reason,
                         "previous_epoch": controls.control_epoch,
                         "control_epoch": updated.control_epoch,
+                        "held_action_count": len(held_actions),
+                        "in_flight_action_count": len(in_flight_actions),
                     },
                     created_at=now,
                 )

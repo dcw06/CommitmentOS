@@ -13,6 +13,7 @@ from googleapiclient.errors import HttpError
 from commitmentos.application.ports.gmail_reader import (
     GmailHistoryChange,
     GmailHistoryPage,
+    GmailMailboxPage,
     GmailMessage,
     GmailWatch,
     SourceAuthorizationError,
@@ -88,6 +89,46 @@ class GoogleGmailReader:
             return GmailWatch(
                 history_id=str(response["historyId"]),
                 expiration=datetime.fromtimestamp(expiration_ms / 1000, tz=timezone.utc),
+            )
+
+        return await asyncio.to_thread(_blocking)
+
+    async def list_messages(
+        self,
+        user_id: str,
+        page_token: str | None,
+    ) -> GmailMailboxPage:
+        def _blocking() -> GmailMailboxPage:
+            baseline_history_id = None
+            request_kwargs: dict[str, Any] = {
+                "userId": "me",
+                "maxResults": self._history_page_size,
+                # Gmail's brace syntax is OR. Downstream normalization still
+                # verifies labels on the fetched message before staging.
+                "q": "{in:inbox in:sent}",
+            }
+            if page_token is not None:
+                request_kwargs["pageToken"] = page_token
+            try:
+                if page_token is None:
+                    # Capture the incremental baseline before scanning. Mail
+                    # arriving during later pages is therefore replayed by
+                    # history.list after this generation publishes.
+                    profile = self._service().users().getProfile(userId="me").execute()
+                    baseline_history_id = str(profile["historyId"])
+                response = self._service().users().messages().list(**request_kwargs).execute()
+                next_token = response.get("nextPageToken")
+            except RefreshError as error:
+                self._credentials_provider.invalidate()
+                raise SourceAuthorizationError("gmail credential refresh failed") from error
+            return GmailMailboxPage(
+                message_ids=tuple(
+                    str(message["id"])
+                    for message in response.get("messages", ())
+                    if message.get("id")
+                ),
+                next_page_token=next_token,
+                latest_history_id=baseline_history_id,
             )
 
         return await asyncio.to_thread(_blocking)

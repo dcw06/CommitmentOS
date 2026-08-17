@@ -12,7 +12,7 @@ from commitmentos.domain.planning.models import (
     UserPlanningPreferences,
 )
 
-POLICY_THRESHOLDS_VERSION = "policy_thresholds_v1"
+POLICY_THRESHOLDS_VERSION = "policy_thresholds_v2"
 MAX_AUTOMATIC_CHANGED_BLOCKS = 2
 MAX_AUTOMATIC_SHIFT_MINUTES = 24 * 60
 
@@ -20,6 +20,7 @@ MAX_AUTOMATIC_SHIFT_MINUTES = 24 * 60
 class RepairPolicyDisposition(StrEnum):
     AUTOMATIC = "automatic"
     APPROVAL_REQUIRED = "approval_required"
+    FORBIDDEN = "forbidden"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,17 +29,20 @@ class RepairPolicyDecision:
     reason_codes: tuple[str, ...]
     changed_block_count: int
     maximum_shift_minutes: int
+    total_displacement_minutes: int
     threshold_version: str = POLICY_THRESHOLDS_VERSION
 
 
 class RepairPolicyEvaluator:
-    """Frozen Phase 4 policy boundary; the planner itself has no policy."""
+    """Versioned autonomy-policy boundary; the planner itself has no policy."""
 
     def evaluate(
         self,
         plan_diff: PlanDiff,
         repaired_plan: PortfolioPlan,
         preferences: UserPlanningPreferences,
+        *,
+        ownership_valid: bool = True,
     ) -> RepairPolicyDecision:
         changed = tuple(
             mutation
@@ -61,10 +65,12 @@ class RepairPolicyEvaluator:
             and mutation.after is not None
         )
         reasons: list[str] = []
+        if not ownership_valid:
+            reasons.append("mutation_target_not_commitmentos_owned")
         if len(changed) > MAX_AUTOMATIC_CHANGED_BLOCKS:
             reasons.append("more_than_two_blocks_changed")
-        if shifts and max(shifts) > MAX_AUTOMATIC_SHIFT_MINUTES:
-            reasons.append("single_shift_exceeds_24_hours")
+        if plan_diff.total_displacement_minutes > MAX_AUTOMATIC_SHIFT_MINUTES:
+            reasons.append("total_displacement_exceeds_24_hours")
         if any(
             mutation.after is not None
             and not self._within_preferred_focus(mutation.after, preferences)
@@ -76,13 +82,18 @@ class RepairPolicyEvaluator:
             reasons.append("daily_focus_limit_exceeded")
         return RepairPolicyDecision(
             disposition=(
-                RepairPolicyDisposition.APPROVAL_REQUIRED
-                if reasons
-                else RepairPolicyDisposition.AUTOMATIC
+                RepairPolicyDisposition.FORBIDDEN
+                if not ownership_valid
+                else (
+                    RepairPolicyDisposition.APPROVAL_REQUIRED
+                    if reasons
+                    else RepairPolicyDisposition.AUTOMATIC
+                )
             ),
             reason_codes=tuple(reasons),
             changed_block_count=len(changed),
             maximum_shift_minutes=max(shifts, default=0),
+            total_displacement_minutes=plan_diff.total_displacement_minutes,
         )
 
     @staticmethod

@@ -23,6 +23,9 @@ from fakes import (  # noqa: E402
     SequentialIdGenerator,
 )
 
+from commitmentos.application.commands.change_commitment import (  # noqa: E402
+    ChangeCommitment,
+)
 from commitmentos.application.commands.change_system_control import (
     ChangeSystemControl,  # noqa: E402
 )
@@ -67,7 +70,7 @@ from commitmentos.domain.planning.portfolio import PortfolioPlanner  # noqa: E40
 from commitmentos.domain.planning.risk import RiskCalculator  # noqa: E402
 from commitmentos.domain.planning.scoring import SlotScorer  # noqa: E402
 from commitmentos.workflows.reconciliation.phase1_workflow import (  # noqa: E402
-    SeededReconciliationWorkflow,
+    DurableReconciliationWorkflow,
 )
 
 CONTROLLED_EMAIL = "controlled@example.invalid"
@@ -163,7 +166,7 @@ class Phase1App:
             self.clock,
             constraint_evaluator,
         )
-        self.workflow = SeededReconciliationWorkflow(
+        self.workflow = DurableReconciliationWorkflow(
             self.uow,
             self.outbox_dispatcher,
             self.clock,
@@ -194,6 +197,12 @@ class Phase1App:
             self.clock,
         )
         self.complete_commitment = CompleteCommitment(
+            self.uow,
+            self.observation_factory,
+            self.observation_dispatcher,
+            self.clock,
+        )
+        self.change_commitment = ChangeCommitment(
             self.uow,
             self.observation_factory,
             self.observation_dispatcher,

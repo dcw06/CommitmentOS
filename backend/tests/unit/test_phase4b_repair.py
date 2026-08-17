@@ -137,7 +137,7 @@ def test_stable_repair_moves_only_affected_block_by_minimum_displacement() -> No
     assert arc["risk_after_repair"] == "on_track"
 
 
-def test_policy_thresholds_v1_requires_approval_for_three_moves() -> None:
+def test_policy_changed_block_limit_requires_approval_for_three_moves() -> None:
     previous = planner().plan(base_input())
     moved = tuple(
         type(block)(
@@ -191,7 +191,7 @@ def test_policy_thresholds_v1_requires_approval_for_three_moves() -> None:
     assert decision.reason_codes == ("more_than_two_blocks_changed",)
 
 
-def test_policy_thresholds_v1_enforces_shift_focus_and_daily_limits() -> None:
+def test_policy_thresholds_v2_enforces_total_shift_focus_and_daily_limits() -> None:
     previous = planner().plan(base_input())
     first, second = previous.work_blocks
     long_shift_plan = replace(
@@ -213,7 +213,30 @@ def test_policy_thresholds_v1_enforces_shift_focus_and_daily_limits() -> None:
         long_shift_plan,
         preferences(),
     )
-    assert "single_shift_exceeds_24_hours" in long_shift.reason_codes
+    assert "total_displacement_exceeds_24_hours" in long_shift.reason_codes
+
+    two_moderate_shifts = replace(
+        previous,
+        planner_run_id="aggregate-shift",
+        work_blocks=tuple(
+            replace(
+                block,
+                interval=TimeInterval(
+                    block.interval.start + timedelta(hours=13),
+                    block.interval.end + timedelta(hours=13),
+                ),
+            )
+            for block in previous.work_blocks
+        ),
+    )
+    aggregate = RepairPolicyEvaluator().evaluate(
+        PlanDiffer().diff(previous, two_moderate_shifts),
+        two_moderate_shifts,
+        preferences(),
+    )
+    assert aggregate.maximum_shift_minutes == 13 * 60
+    assert aggregate.total_displacement_minutes == 26 * 60
+    assert "total_displacement_exceeds_24_hours" in aggregate.reason_codes
 
     narrow_preferences = replace(
         preferences(),
@@ -262,3 +285,15 @@ def test_policy_thresholds_v1_enforces_shift_focus_and_daily_limits() -> None:
         preferences(),
     )
     assert "daily_focus_limit_exceeded" in daily.reason_codes
+
+
+def test_policy_has_explicit_forbidden_ownership_disposition() -> None:
+    plan = planner().plan(base_input())
+    decision = RepairPolicyEvaluator().evaluate(
+        PlanDiffer().diff(plan, plan),
+        plan,
+        preferences(),
+        ownership_valid=False,
+    )
+    assert decision.disposition == RepairPolicyDisposition.FORBIDDEN
+    assert decision.reason_codes == ("mutation_target_not_commitmentos_owned",)

@@ -151,6 +151,8 @@ class Commitment:
     policy_profile: str
     created_at: datetime
     updated_at: datetime
+    explicit_priority: int = 0
+    last_reconciled_at: datetime | None = None
 
     def transition(self, target: LifecycleStatus, at: datetime) -> Commitment:
         if target == self.lifecycle_status:
@@ -215,6 +217,26 @@ class Commitment:
             updated_at=at,
         )
 
+    def reprioritize(self, priority: int, at: datetime) -> Commitment:
+        if self.lifecycle_status in (
+            LifecycleStatus.COMPLETED,
+            LifecycleStatus.DISMISSED,
+            LifecycleStatus.CANCELED,
+        ):
+            raise InvalidTransitionError(
+                f"cannot reprioritize a commitment in terminal state {self.lifecycle_status}"
+            )
+        if not -100 <= priority <= 100:
+            raise InvalidTransitionError("priority must be between -100 and 100")
+        if priority == self.explicit_priority:
+            return self
+        return replace(
+            self,
+            explicit_priority=priority,
+            revision=self.revision + 1,
+            updated_at=at,
+        )
+
     def with_projection(self, projection: CommitmentProjection, at: datetime) -> Commitment:
         # Projections are replaceable read state carrying their own provenance;
         # attaching one never advances the authoritative fact revision.
@@ -222,4 +244,9 @@ class Commitment:
             raise InvalidTransitionError(
                 "projection provenance does not match the current commitment revision"
             )
-        return replace(self, projection=projection, updated_at=at)
+        return replace(
+            self,
+            projection=projection,
+            last_reconciled_at=at,
+            updated_at=at,
+        )

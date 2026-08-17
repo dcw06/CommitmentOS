@@ -34,6 +34,17 @@ class GmailHistoryPage:
 
 
 @dataclass(frozen=True, slots=True)
+class GmailMailboxPage:
+    """One bounded page used to rebuild a fresh history baseline."""
+
+    message_ids: tuple[str, ...]
+    next_page_token: str | None
+    # Page one carries the history ID captured before the mailbox scan. Later
+    # pages may omit it; the generation checkpoints the baseline durably.
+    latest_history_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class GmailMessage:
     message_id: str
     thread_id: str
@@ -60,6 +71,18 @@ class GmailReader(Protocol):
         start_history_id: str,
         page_token: str | None,
     ) -> GmailHistoryPage:
+        ...
+
+    async def list_messages(
+        self,
+        user_id: str,
+        page_token: str | None,
+    ) -> GmailMailboxPage:
+        """List one bounded Inbox-or-Sent page for cursor recovery.
+
+        Page one carries a fresh mailbox history ID captured before scanning;
+        callers publish it only after every page and normalized item commits.
+        """
         ...
 
     async def get_message(self, user_id: str, message_id: str) -> GmailMessage | None:

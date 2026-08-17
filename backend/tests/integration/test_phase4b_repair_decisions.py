@@ -144,6 +144,16 @@ class TestStableAutomaticRepair:
             repair_action["mutation"]["expected_observed_event_etag"]
             == snapshot["observed_event_etag"]
         )
+        assert repair_action["before_state"] == {
+            "scheduled_start": before[target["work_block_id"]][
+                "scheduled_start"
+            ].isoformat(),
+            "scheduled_end": before[target["work_block_id"]][
+                "scheduled_end"
+            ].isoformat(),
+            "calendar_event_id": target["calendar_event_id"],
+            "observed_event_etag": snapshot["observed_event_etag"],
+        }
         activities = app.store["activity_events"].values()
         risk_events = [
             row
@@ -152,11 +162,20 @@ class TestStableAutomaticRepair:
             and "risk_before_repair" in row["payload"]
         ]
         assert risk_events
+        repair_event = next(
+            row
+            for row in activities
+            if row["event_type"] == ActivityEventType.PLAN_REPAIRED.value
+        )
+        assert repair_event["payload"]["explanation"]["source"] == "gemini"
+        assert repair_event["payload"]["explanation"]["prompt_version"] == (
+            "explanation_v1"
+        )
         policy_event = next(
             row
             for row in activities
             if row["event_type"] == ActivityEventType.POLICY_DECIDED.value
-            and row["payload"].get("threshold_version") == "policy_thresholds_v1"
+            and row["payload"].get("threshold_version") == "policy_thresholds_v2"
         )
         assert policy_event["payload"]["disposition"] == "automatic"
         assert policy_event["payload"]["undo_available"] is True
@@ -242,7 +261,7 @@ class TestStableAutomaticRepair:
             row
             for row in app.store["activity_events"].values()
             if row["event_type"] == ActivityEventType.POLICY_DECIDED.value
-            and row["payload"].get("threshold_version") == "policy_thresholds_v1"
+            and row["payload"].get("threshold_version") == "policy_thresholds_v2"
         )
         assert policy_event["payload"]["disposition"] == "automatic"
 

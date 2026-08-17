@@ -18,6 +18,7 @@ from conftest import CONTROLLED_USER, Phase1App
 
 from commitmentos.application.commands.reconcile_observation import ReconcileObservation
 from commitmentos.application.ports.gmail_reader import GmailMessage
+from commitmentos.application.queries.get_system_status import GetSystemStatus
 from commitmentos.contracts.model_output import (
     CommitmentInterpretationV1,
     CommitmentProposalWireV2,
@@ -492,6 +493,35 @@ class TestIdentityAcrossMessages:
 
 
 class TestValidationBoundary:
+    async def test_retryable_workflow_failure_surfaces_reconciliation_retrying(
+        self, app: Phase1App
+    ) -> None:
+        message = app.gmail.add_message(
+            "msg_retrying_001",
+            "thread_retrying_001",
+            app.clock.now(),
+            subject="Retry fixture",
+            body_text="Please send the retry fixture by Friday.",
+            label_ids=("INBOX",),
+        )
+        await observe_message(app, message)
+        task = app.task_dispatcher.reconciliation_tasks[-1][1]
+
+        class ExplodingWorkflow:
+            async def execute(self, request):  # noqa: ANN001, ANN202
+                del request
+                raise RuntimeError("scripted retryable workflow failure")
+
+        command = ReconcileObservation(app.uow, ExplodingWorkflow(), app.clock)  # type: ignore[arg-type]
+        result = await command.execute(task)
+        assert result.status.value == "retryable_failure"
+        status = await GetSystemStatus(app.uow, app.clock).execute(CONTROLLED_USER)
+        assert any(
+            item["state"] == "reconciliation_retrying"
+            and item["processing_attempt"] == 1
+            for item in status.failure_states
+        )
+
     async def test_fabricated_evidence_is_rejected_with_zero_commitments(
         self, app: Phase1App
     ) -> None:
@@ -547,6 +577,10 @@ class TestValidationBoundary:
         assert results[0].status.value == "completed"
         assert commitments_in(app) == {}
         assert "interpretation_rejected" in activity_types(app)
+        status = await GetSystemStatus(app.uow, app.clock).execute(CONTROLLED_USER)
+        assert "model_output_rejected" in {
+            item["state"] for item in status.failure_states
+        }
 
     async def test_ambiguous_ownership_routes_to_confirmation(self, app: Phase1App) -> None:
         message = app.gmail.add_message(
@@ -705,7 +739,7 @@ class TestAdkGraphExecution:
 
         adk_reconcile = ReconcileObservation(
             app.uow,
-            AdkReconciliationWorkflow(app.workflow, app.uow),
+            AdkReconciliationWorkflow(app.workflow),
             app.clock,
         )
         _, task = app.task_dispatcher.reconciliation_tasks[0]

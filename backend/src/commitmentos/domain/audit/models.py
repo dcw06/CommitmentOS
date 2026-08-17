@@ -29,6 +29,12 @@ class ActivityEventType(StrEnum):
     WORK_CHECK_IN_REQUIRED = "work_check_in_required"
     PLAN_UNDO_REQUESTED = "plan_undo_requested"
     COMPLETION_RECORDED = "completion_recorded"
+    COMMITMENT_REOPENED = "commitment_reopened"
+    COMMITMENT_PRIORITY_CHANGED = "commitment_priority_changed"
+    COMMITMENT_PAUSED = "commitment_paused"
+    COMMITMENT_RESUMED = "commitment_resumed"
+    COMMITMENT_DISMISSED = "commitment_dismissed"
+    ACCESS_RECORDED = "access_recorded"
     FAILURE_RECORDED = "failure_recorded"
     CONTROLLED_CLEANUP_COMPLETED = "controlled_cleanup_completed"
 

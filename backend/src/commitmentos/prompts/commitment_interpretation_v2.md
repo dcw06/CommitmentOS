@@ -36,7 +36,8 @@ Rules:
 3. `deadline.proposed_value` must be the deadline interpreted in the thread
    timezone using each message's sent time as the reference for relative
    expressions; `deadline.source_expression` must quote the words that express
-   it. If no deadline is stated, omit the deadline object entirely.
+   it. A date-only expression defaults to 17:30 in the thread timezone; do not
+   use midnight. If no deadline is stated, omit the deadline object entirely.
 4. Every evidence quote must be an exact substring of one provided message
    body, and `message_id` must identify that message. The first evidence span
    must be the quote that best anchors the commitment itself.

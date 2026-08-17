@@ -12,9 +12,15 @@ import base64
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from conftest import CONTROLLED_EMAIL, CONTROLLED_USER, Phase1App, restarted
 
+from commitmentos.application.commands.receive_gmail_signal import (
+    ReceiveGmailSignal,
+    SignalRateLimitError,
+)
 from commitmentos.application.dto import CommandStatus, FencedLease
+from commitmentos.application.ports.gmail_reader import GmailMailboxPage
 from commitmentos.contracts.observations import ReconciliationStatus
 from commitmentos.contracts.synchronization import (
     SyncGenerationStatus,
@@ -290,8 +296,6 @@ class TestBoundedGenerationProtocol:
                 stale_fence,
             )
 
-        import pytest
-
         with pytest.raises(InvalidTransitionError):
             await app.uow.run(_try_checkpoint)
 
@@ -366,6 +370,27 @@ class TestBoundedGenerationProtocol:
 
 
 class TestSyncFailureStates:
+    async def test_gmail_signal_rate_limit_rejects_without_extra_dispatch(
+        self, app: Phase1App
+    ) -> None:
+        receiver = ReceiveGmailSignal(
+            app.uow,
+            app.task_dispatcher,
+            app.clock,
+            CONTROLLED_USER,
+            CONTROLLED_EMAIL,
+            "task_v1",
+            maximum_signals_per_window=1,
+            rate_limit_window_seconds=60,
+        )
+        await receiver.execute(pubsub_envelope(5200), "trace-rate-1")
+        with pytest.raises(SignalRateLimitError):
+            await receiver.execute(pubsub_envelope(5201), "trace-rate-2")
+        request = app.store["sync_requests"][f"gmail:{CONTROLLED_USER}"]
+        assert request["latest_history_id"] == 5200
+        assert request["rate_window_signal_count"] == 1
+        assert len(app.task_dispatcher.source_sync_tasks) == 1
+
     async def test_auth_failure_records_reauth_required(self, app: Phase1App) -> None:
         seed_spike_cursor(app)
         script_two_page_history(app)
@@ -376,7 +401,7 @@ class TestSyncFailureStates:
         assert results[0].error_code == "reauth_required"
         assert request_status(app) == "reauth_required"
 
-    async def test_invalid_cursor_marks_full_resync_required(
+    async def test_invalid_cursor_automatically_runs_bounded_full_resync(
         self, app: Phase1App
     ) -> None:
         seed_spike_cursor(app)
@@ -384,17 +409,44 @@ class TestSyncFailureStates:
         await app.receive_gmail.execute(pubsub_envelope(5200), "trace-sync-test")
         app.gmail.raise_cursor_invalid = True
         results = await app.run_source_sync_tasks()
-        assert results[0].status == CommandStatus.TERMINAL_FAILURE
+        assert results[0].status == CommandStatus.ACCEPTED
         assert results[0].error_code == "full_resync_required"
-        assert cursor_document(app)["full_resync_required"] is True
+        assert results[-1].status == CommandStatus.COMPLETED
+        assert app.gmail.mailbox_calls == [None]
+        assert cursor_document(app)["full_resync_required"] is False
+        assert cursor_document(app)["published_cursor"] == app.gmail.watch.history_id
+
+    async def test_full_resync_publishes_pre_scan_baseline_after_multiple_pages(
+        self, app: Phase1App
+    ) -> None:
+        seed_spike_cursor(app)
+        message_ids = script_two_page_history(app)
+        baseline = "5300"
+        app.gmail.mailbox_pages = {
+            None: GmailMailboxPage(
+                tuple(message_ids[:3]),
+                "mailbox-page-2",
+                baseline,
+            ),
+            "mailbox-page-2": GmailMailboxPage(
+                tuple(message_ids[3:]),
+                None,
+                None,
+            ),
+        }
+        await app.receive_gmail.execute(pubsub_envelope(5200), "trace-sync-race")
+        app.gmail.raise_cursor_invalid = True
+        results = await app.run_source_sync_tasks()
+
+        assert results[-1].status == CommandStatus.COMPLETED
+        assert app.gmail.mailbox_calls == [None, "mailbox-page-2"]
+        assert cursor_document(app)["published_cursor"] == baseline
 
     async def test_crash_gap_repaired_by_maintenance(self, app: Phase1App) -> None:
         seed_spike_cursor(app)
         script_two_page_history(app)
         # The request commits but the named task creation fails (B1 shape).
         app.task_dispatcher.fail_next_enqueues = 1
-        import pytest
-
         with pytest.raises(ConnectionError):
             await app.receive_gmail.execute(pubsub_envelope(5200), "trace-sync-test")
         assert request_status(app) == "pending"

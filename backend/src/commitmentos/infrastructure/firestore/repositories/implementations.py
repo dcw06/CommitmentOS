@@ -340,6 +340,23 @@ class FirestoreObservationRepository:
         )
         return [self._serializer.from_document(doc_id, data) for doc_id, data in rows]
 
+    async def list_for_statuses(
+        self,
+        user_id: str,
+        reconciliation_statuses: Sequence[str],
+        limit: int,
+    ) -> Sequence[ObservationV1]:
+        rows = await self._context.query(
+            SOURCE_OBSERVATIONS,
+            [
+                ("user_id", "==", user_id),
+                ("reconciliation_status", "in", list(reconciliation_statuses)),
+            ],
+            order_by=("observed_at", "ASCENDING"),
+            limit=limit,
+        )
+        return [self._serializer.from_document(doc_id, data) for doc_id, data in rows]
+
     async def list_staged_for_release(
         self,
         user_id: str,

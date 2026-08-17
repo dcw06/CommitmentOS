@@ -32,6 +32,7 @@ def _client(app: Phase1App) -> tuple[TestClient, dict[str, str]]:
         "resource_id": "rate-limit-resource",
         "token_hash": hashlib.sha256(CHANNEL_TOKEN.encode()).hexdigest(),
         "expiration": app.clock.now() + timedelta(days=1),
+        "status": "active",
     }
     router = CalendarWebhookRouter(
         CalendarChannelVerifier(app.uow, app.clock, WINDOW_LIMIT, 60),

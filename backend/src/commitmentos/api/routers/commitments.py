@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from commitmentos.api.dependencies.controlled_session import ControlledSessionDependency
 from commitmentos.application.dto import AuthenticatedActor
 from commitmentos.application.queries.get_commitment import GetCommitment
+from commitmentos.application.queries.get_today import approval_summary
 from commitmentos.application.queries.list_commitments import ListCommitments
 from commitmentos.domain.commitments.models import LifecycleStatus, RiskLevel
 
@@ -99,9 +100,38 @@ class CommitmentsRouter:
                 },
                 "revision": commitment.revision,
                 "plan_revision": commitment.plan_revision,
+                "explicit_priority": commitment.explicit_priority,
+                "last_reconciled_at": (
+                    commitment.last_reconciled_at.isoformat()
+                    if commitment.last_reconciled_at is not None
+                    else None
+                ),
                 "created_at": commitment.created_at.isoformat(),
                 "updated_at": commitment.updated_at.isoformat(),
+                "projection": (
+                    {
+                        "risk_level": commitment.projection.risk_level.value,
+                        "remaining_minutes": commitment.projection.remaining_minutes,
+                        "verified_completed_minutes": (
+                            commitment.projection.verified_completed_minutes
+                        ),
+                        "blocking_status": (
+                            commitment.projection.blocking_status.value
+                        ),
+                        "planner_run_id": commitment.projection.planner_run_id,
+                        "current": (
+                            commitment.projection.source_commitment_revision
+                            == commitment.revision
+                        ),
+                    }
+                    if commitment.projection is not None
+                    else None
+                ),
             },
+            "portfolio": detail.portfolio,
+            "pending_approvals": [
+                approval_summary(item) for item in detail.pending_approvals
+            ],
             # The source evidence view: minimal excerpts plus references, never
             # message bodies (plan §13.3).
             "evidence": [
@@ -139,6 +169,8 @@ class CommitmentsRouter:
                     "event_type": event.event_type.value,
                     "summary": event.summary,
                     "actor": event.actor,
+                    "trace_id": event.trace_id,
+                    "payload": dict(event.payload),
                     "created_at": event.created_at.isoformat(),
                 }
                 for event in detail.activity

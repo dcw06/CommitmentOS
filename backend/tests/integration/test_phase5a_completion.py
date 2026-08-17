@@ -14,12 +14,20 @@ from datetime import timedelta
 from conftest import CONTROLLED_USER, Phase1App
 from test_phase4c_always_on_safety import block, commitment, create_live_plan
 
+from commitmentos.application.commands.change_commitment import (
+    ChangeCommitmentLifecycleRequest,
+    ReopenCommitmentRequest,
+    SetCommitmentPriorityRequest,
+)
 from commitmentos.application.commands.complete_commitment import (
     CompleteCommitmentRequest,
 )
 from commitmentos.application.commands.run_maintenance import MaintenanceKind
 from commitmentos.application.dto import CommandStatus
+from commitmentos.application.queries.get_commitment import GetCommitment
 from commitmentos.application.queries.get_system_status import GetSystemStatus
+from commitmentos.application.queries.get_today import GetToday
+from commitmentos.application.queries.list_commitments import ListCommitments
 from commitmentos.contracts.observations import ObservationType
 from commitmentos.domain.audit.models import ActivityEventType
 from commitmentos.domain.commitments.models import LifecycleStatus
@@ -456,4 +464,147 @@ class TestCompletionContinuation:
         status = await GetSystemStatus(app.uow, app.clock).execute(CONTROLLED_USER)
         assert all(
             failure["state"] != "no_feasible_plan" for failure in status.failure_states
+        )
+
+
+class TestCommitmentCorrections:
+    async def test_pause_releases_blocks_and_resume_replans_current_demand(
+        self, app: Phase1App
+    ) -> None:
+        await create_live_plan(app)
+        commitment_id = await _live_commitment_id(app)
+        planned_ids = {
+            block_id
+            for block_id, row in app.store["work_blocks"].items()
+            if row["execution_state"] == WorkBlockExecutionState.PLANNED.value
+        }
+        outbox_before = set(app.store["action_outbox"])
+        app.clock.advance(60)
+
+        result = await app.change_commitment.change_lifecycle(
+            app.actor(),
+            ChangeCommitmentLifecycleRequest(
+                commitment_id,
+                app.store["commitments"][commitment_id]["revision"],
+                LifecycleStatus.PAUSED,
+            ),
+            "trace-pause",
+        )
+        assert result.status == CommandStatus.COMPLETED
+        await app.run_reconciliation_tasks()
+
+        assert app.store["commitments"][commitment_id]["lifecycle_status"] == (
+            LifecycleStatus.PAUSED.value
+        )
+        assert planned_ids
+        assert all(
+            app.store["work_blocks"][block_id]["execution_state"]
+            == WorkBlockExecutionState.CANCELED.value
+            for block_id in planned_ids
+        )
+        new_outbox = [
+            row
+            for outbox_id, row in app.store["action_outbox"].items()
+            if outbox_id not in outbox_before
+        ]
+        assert len(new_outbox) == len(planned_ids)
+        assert all(row["mutation"]["action_type"] == "cancel" for row in new_outbox)
+        assert any(
+            row["status"] == "published"
+            and commitment_id not in row["commitment_order"]
+            for row in app.store["planner_runs"].values()
+        )
+
+        app.clock.advance(60)
+        resumed = await app.change_commitment.change_lifecycle(
+            app.actor(),
+            ChangeCommitmentLifecycleRequest(
+                commitment_id,
+                app.store["commitments"][commitment_id]["revision"],
+                LifecycleStatus.ACTIVE,
+            ),
+            "trace-resume",
+        )
+        assert resumed.status == CommandStatus.COMPLETED
+        await app.run_reconciliation_tasks()
+        assert app.store["commitments"][commitment_id]["lifecycle_status"] == (
+            LifecycleStatus.ACTIVE.value
+        )
+        assert any(
+            row["execution_state"] == WorkBlockExecutionState.PLANNED.value
+            and block_id not in planned_ids
+            for block_id, row in app.store["work_blocks"].items()
+        )
+
+    async def test_dashboard_queries_expose_current_portfolio_and_outcomes(
+        self, app: Phase1App
+    ) -> None:
+        await create_live_plan(app)
+        commitment_id = await _live_commitment_id(app)
+
+        page = await ListCommitments(app.uow).execute(
+            CONTROLLED_USER, None, None, None, 25
+        )
+        summary = next(
+            item for item in page.items if item["commitment_id"] == commitment_id
+        )
+        assert summary["projection"]["current"] is True
+        assert summary["portfolio"]["allocated_work_minutes"] == 180
+        assert summary["portfolio"]["shortfall_minutes"] == 0
+        assert "shared_buffer_minutes" in summary["portfolio"]
+
+        detail = await GetCommitment(app.uow).execute(
+            CONTROLLED_USER, commitment_id
+        )
+        assert detail is not None
+        assert detail.portfolio == summary["portfolio"]
+
+        status = GetSystemStatus(app.uow, app.clock)
+        today = await GetToday(app.uow, app.clock, status).execute(
+            CONTROLLED_USER, "America/Los_Angeles"
+        )
+        assert today.outcome_strip["commitments_kept_feasible"] == 1
+        assert today.outcome_strip["work_minutes_reserved"] == 180
+        assert today.outcome_strip["manual_reschedules_avoided"] == 0
+
+    async def test_priority_and_reopen_are_revision_guarded_and_replan(
+        self, app: Phase1App
+    ) -> None:
+        await create_live_plan(app)
+        commitment_id = await _live_commitment_id(app)
+        assert app.store["commitments"][commitment_id]["last_reconciled_at"] is not None
+        revision = app.store["commitments"][commitment_id]["revision"]
+
+        priority = await app.change_commitment.set_priority(
+            app.actor(),
+            SetCommitmentPriorityRequest(commitment_id, revision, 25),
+            "trace-priority",
+        )
+        assert priority.status == CommandStatus.COMPLETED
+        assert app.store["commitments"][commitment_id]["explicit_priority"] == 25
+        await app.run_reconciliation_tasks()
+
+        completed = await app.complete_commitment.execute(
+            app.actor(), _completion_request(app, commitment_id), "trace-complete"
+        )
+        assert completed.status == CommandStatus.COMPLETED
+        await app.drain()
+        completed_revision = app.store["commitments"][commitment_id]["revision"]
+
+        reopened = await app.change_commitment.reopen(
+            app.actor(),
+            ReopenCommitmentRequest(commitment_id, completed_revision),
+            "trace-reopen",
+        )
+        assert reopened.status == CommandStatus.COMPLETED
+        stored = app.store["commitments"][commitment_id]
+        assert stored["lifecycle_status"] == LifecycleStatus.ACTIVE.value
+        assert stored["completion_evidence_id"] is None
+        assert stored["completed_at"] is None
+        assert any(
+            row["event_type"] == ActivityEventType.COMMITMENT_REOPENED.value
+            for row in app.store["activity_events"].values()
+        )
+        assert app.task_dispatcher.reconciliation_tasks[-1][1].observation_id == (
+            reopened.identifiers["observation_id"]
         )

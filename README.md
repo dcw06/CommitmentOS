@@ -31,8 +31,8 @@ Built for the **All Things Agentic Hackathon** (Taskmaster track).
   fewest blocks move the smallest distance, unaffected blocks stay
   byte-identical, and the repair lands in **~9 seconds** (measured across
   ten consecutive live campaign runs; budget 15 s warmed / 60 s operational).
-- **Escalates instead of pretending**: out-of-policy repairs (e.g. a >24-hour
-  shift) become explicit approvals; infeasibility, reauthorization, and every
+- **Escalates instead of pretending**: out-of-policy repairs (e.g. more than
+  24 hours of total displacement) become explicit approvals; infeasibility, reauthorization, and every
   failure state are visible in the dashboard — never hidden behind an
   "on track" badge.
 - **Tracks honest progress**: elapsed time never counts as work. Only
@@ -56,9 +56,11 @@ dispatch repair, and the once-a-minute safety reconciliation.
 **Secret Manager** holds the Gemini key, OAuth client, and the controlled
 account's refresh token.
 
-Every reconciliation run is a **bounded ADK graph invocation**: it loads one
-durable observation, interprets (Gemini node) and decides (deterministic
-nodes), persists intent or an approval request, and terminates. External
+Every reconciliation run is a **bounded ADK graph invocation** with two honest
+stages: execute the durable reconciliation controller once, then finalize a
+safe run summary. The controller contains the explicit interpretation,
+identity, evidence, portfolio, policy, and outbox stages; the ADK graph does
+not pretend those in-process stages are separate graph nodes. External
 Calendar mutation happens only in a separate replay-safe Cloud Tasks
 executor using stable client-supplied event IDs, `If-Match` preconditions,
 and revision/epoch guards. Nothing waits in memory; the dashboard, approvals,
@@ -67,8 +69,8 @@ and action results continue through new durable observations.
 | Route class | Trust contract |
 |---|---|
 | `/app`, `/api/v1/*` | Google OAuth login (controlled account allowlist) → opaque server-side session cookie; CSRF token on every mutation |
-| `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | Google-signed OIDC: exact audience + per-group service-account identity |
-| Calendar webhook | High-entropy channel token (constant-time hash compare) + channel/resource mapping + durable per-channel rate limit |
+| `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | Google-signed OIDC: exact audience + per-group service-account identity; Gmail change signals are durably rate-limited |
+| Calendar webhook | High-entropy channel token (constant-time hash compare) + channel/resource mapping + active overlap status + stored expiry + durable per-channel rate limit |
 | `/demo` | Read-only seeded judge mode; static data, no Firestore/credential path, every mutation method rejected |
 
 ### Stack
@@ -121,7 +123,7 @@ uv sync
 cp .env.example .env        # then fill in your project's values
                             # (every variable maps 1:1 to bootstrap/settings.py)
 
-# 3. Tests — 224 tests over the in-memory Firestore twin; no cloud access
+# 3. Tests — 254 tests over the in-memory Firestore twin; no cloud access
 uv run pytest
 
 # 4. Frontend
@@ -184,6 +186,104 @@ The app does not need to stay publicly live outside judging; it scales to
 zero. All measured evidence in `docs/` was produced against the deployed
 service.
 
+### Source serialization, cursor recovery, and publication
+
+Gmail Pub/Sub notifications are change signals, not message payloads. The
+receiver durably coalesces concurrent delivery to the greatest observed
+history ID. Actual source work is serialized by a fenced
+`source-sync:gmail:<user>` lease, so only one Gmail generation for the
+controlled user can advance the cursor at a time; duplicate named tasks
+resume or converge on the same generation.
+
+An incremental `history.list` 404 means the published Gmail cursor is no
+longer usable. The failed generation is abandoned, the cursor is marked for
+full resynchronization, and a named full-resync task is queued automatically.
+That generation scans Inbox and Sent only. Before its first mailbox page it
+captures the profile history ID as the next incremental baseline, so mail
+arriving during a multi-page scan is replayed after publication instead of
+falling into a scan/cursor race. Calendar invalid sync tokens follow the same
+automatic full-generation path over the configured time horizon, including
+tombstones for previously published events that disappeared.
+
+Both sources use bounded staging generations:
+
+- One provider page is fetched per named Cloud Task. Normalized generation
+  items, page checkpoints, and commutative manifests make retries independent
+  of worker lifetime and chunk boundaries.
+- Each transaction is capped by configuration at 400 writes and 8 MiB; apply
+  chunks are additionally capped at 100 items (the defaults in
+  `.env.example`). Transaction overhead is reserved before item writes.
+- Observations remain `staged`, and Calendar snapshot data remains behind a
+  publication barrier, while a generation is incomplete. Reconciliation and
+  planning therefore cannot consume a half-applied source view.
+- A single fenced compare-and-set publication transaction verifies staged and
+  applied manifests, promotes the candidate cursor, advances the cursor
+  revision, and clears the barrier. Only then are observations released in
+  bounded batches. The previously published cursor remains authoritative
+  after any pre-publication crash.
+
+### Authoritative facts versus projections
+
+Commitments, confirmed effort/deadlines, evidence, work-block execution state,
+verified minutes, Calendar snapshots, approvals, controls, and outbox records
+are authoritative revisioned facts. Portfolio allocation, remaining effort,
+risk, projected finish, shortfall, and shared buffer are replaceable read
+projections. Every projection carries its source commitment revision,
+work-block revision hash, planner-run ID, and calculator version; the dashboard
+exposes allocation fields only while that provenance is current. A stale or
+missing projection is shown as unknown, never promoted into fact.
+
+Before external I/O the outbox executor independently reloads authoritative
+revisions, the execution-control epoch, ownership, and observed Calendar etag.
+Stable event IDs make create replay-safe; patch/cancel use `If-Match`, and an
+HTTP 412 stales the intent and requests a fresh source sync. Action results
+return as new observations rather than being inferred from queued intent.
+
+### Seeded demo, live seed, reset, and evaluation
+
+`/demo` needs no database seed or reset command. It reads packaged scenario
+documents from `backend/src/commitmentos/demo_data/` through a read-only model
+with no Firestore or Google credential adapter, so every request starts from
+the same data and mutations are impossible.
+
+For an end-to-end seed against the deployed service and real Calendar, use the
+audited live driver. Its generated run tag scopes cleanup:
+
+```bash
+.venv/bin/python scripts/run_seeded_slice.py run --cleanup
+.venv/bin/python scripts/run_seeded_slice.py run --run-tag <tag>
+.venv/bin/python scripts/run_seeded_slice.py cleanup --run-tag <tag>
+```
+
+For a full controlled-account reset, preview the exact owned events and domain
+document counts, then copy the printed revision-bound confirmation phrase:
+
+```bash
+.venv/bin/python scripts/reset_controlled_account.py preview
+.venv/bin/python scripts/reset_controlled_account.py run \
+  --confirm "cleanup <user_id> events=N documents=M"
+```
+
+The extraction evaluation calls the pinned production Gemini model, prompt,
+wire schema, and deterministic validator. It writes a new result under
+`docs/phase2_evidence/`; do not overwrite the recorded evidence pack:
+
+```bash
+.venv/bin/python scripts/run_extraction_eval.py
+.venv/bin/python scripts/run_extraction_eval.py --limit 5
+.venv/bin/python scripts/run_extraction_eval.py --category prompt_injection
+```
+
+### Post-audit hardening status
+
+The current source includes a post-campaign hardening pass recorded in
+`docs/post_audit_hardening_progress.md`. It removes misleading unused
+scaffolding and closes cursor recovery, channel validation, explanation,
+reopen/priority, policy, audit, outbox, and failure-state gaps. The immutable
+evidence packs still describe the previously deployed revision; this newer
+source must pass a fresh owner-run live/security campaign before its results
+replace or extend those records.
+
 ## OAuth: publishing mode, scopes, limitations
 
 - **Mode:** External / In production / **unverified personal use** — chosen
@@ -199,6 +299,22 @@ service.
   other Google identity completes sign-in and receives `account not allowed`
   with no session. Revocation is grant-wide; the UI surfaces
   `reauth_required` rather than silently using stale data.
+- **Testing-mode fallback:** if the consent screen must return to External /
+  Testing, treat the restricted-scope refresh token as expiring after seven
+  days. Reconnect at least every seven days, immediately before the golden
+  campaign, and again before recording:
+
+  ```bash
+  .venv/bin/python scripts/oauth_spike.py authorize --mode testing
+  .venv/bin/python scripts/oauth_spike.py refresh
+  .venv/bin/python scripts/gmail_watch_spike.py register
+  .venv/bin/python scripts/calendar_watch_spike.py register --service-url <SERVICE_URL>
+  ```
+
+  The authorize command stores the new refresh token in Secret Manager and
+  never prints it. In the selected In-production personal-use mode there is
+  no seven-day cadence; reconnect is event-driven whenever
+  `reauth_required` appears, then renew both watches with the same commands.
 - Production multi-tenant token storage is out of scope by design; the
   controlled account's refresh token lives in Secret Manager.
 

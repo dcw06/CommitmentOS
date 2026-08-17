@@ -7,6 +7,8 @@ from pathlib import Path
 from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+REQUIRED_POLICY_VERSION = "autonomy_policy_v2"
+
 
 class RuntimeEnvironment(StrEnum):
     DEVELOPMENT = "development"
@@ -76,7 +78,45 @@ class Settings(BaseSettings):
         return cls(_env_file=os.environ.get("COMMITMENTOS_ENV_FILE", ".env"))
 
     def validate_live_mode_guards(self) -> None:
-        ...
+        """Reject unsafe or placeholder live configuration before wiring I/O.
+
+        Pydantic proves types; these checks prove cross-field deployment
+        invariants that cannot be expressed as individual field constraints.
+        Development and test remain able to use local HTTP endpoints.
+        """
+        if not self.controlled_user_id.strip() or not self.controlled_email.strip():
+            raise ValueError("controlled user identity must be configured")
+        if not self.calendar_webhook_path.startswith("/"):
+            raise ValueError("calendar_webhook_path must be origin-relative")
+        if self.environment != RuntimeEnvironment.PRODUCTION:
+            return
+
+        base_url = str(self.service_base_url).rstrip("/")
+        redirect_url = str(self.oauth_redirect_uri)
+        if not base_url.startswith("https://") or not redirect_url.startswith("https://"):
+            raise ValueError("production service and OAuth redirect URLs must use HTTPS")
+        if not redirect_url.startswith(f"{base_url}/"):
+            raise ValueError("production OAuth redirect must use the service origin")
+        if any(marker in base_url.lower() for marker in ("localhost", ".invalid", "example")):
+            raise ValueError("production service URL cannot be a placeholder")
+        if self.policy_version != REQUIRED_POLICY_VERSION:
+            raise ValueError(
+                f"production policy_version must be {REQUIRED_POLICY_VERSION}"
+            )
+        if not self.gmail_pubsub_topic.startswith(
+            f"projects/{self.google_cloud_project}/topics/"
+        ):
+            raise ValueError("production Gmail topic must be a fully qualified project topic")
+        for name, reference in (
+            ("oauth_client_secret_ref", self.oauth_client_secret_ref),
+            ("controlled_refresh_token_secret_ref", self.controlled_refresh_token_secret_ref),
+            ("gemini_api_key_secret_ref", self.gemini_api_key_secret_ref),
+            ("calendar_channel_secret_ref", self.calendar_channel_secret_ref),
+        ):
+            if not reference.startswith(f"projects/{self.google_cloud_project}/secrets/"):
+                raise ValueError(f"{name} must reference Secret Manager in the live project")
+            if "/versions/" not in reference:
+                raise ValueError(f"{name} must include a Secret Manager version")
 
     def required_google_scopes(self) -> tuple[str, ...]:
         # scope_set_v1 — frozen in the Phase 0 checklist; changes require scope_set_v2.

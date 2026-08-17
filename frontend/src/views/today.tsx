@@ -13,6 +13,7 @@ import {
   Badge,
   Card,
   Empty,
+  formatDateTime,
   formatTime,
   minutesLabel,
   useAction,
@@ -47,7 +48,7 @@ const CALENDAR_DECISION_TYPES = new Set([
   "calendar_user_deleted_decision",
 ]);
 
-function ApprovalCard({
+export function ApprovalCard({
   approval,
   refresh,
 }: {
@@ -192,6 +193,21 @@ function Controls({ view, refresh }: { view: TodayView; refresh: () => void }) {
   if (!controls) return null;
   const monitoringPaused = controls.observationMode === "paused";
   const actionsPaused = controls.automaticActionMode === "paused";
+  const toggleAutomaticActions = async () => {
+    if (
+      actionsPaused &&
+      !window.confirm(
+        "Resume automatic Calendar actions? Every held action will be revalidated against current commitment, plan, control, and Calendar state before execution.",
+      )
+    ) {
+      return;
+    }
+    await changeControl(
+      "automatic_actions",
+      actionsPaused ? "enabled" : "paused",
+      controls.controlEpoch,
+    );
+  };
   return (
     <Card
       title="Execution controls"
@@ -236,15 +252,7 @@ function Controls({ view, refresh }: { view: TodayView; refresh: () => void }) {
           {!DEMO_MODE && (
             <button
               disabled={busy}
-              onClick={() =>
-                run(() =>
-                  changeControl(
-                    "automatic_actions",
-                    actionsPaused ? "enabled" : "paused",
-                    controls.controlEpoch,
-                  ),
-                )
-              }
+              onClick={() => run(toggleAutomaticActions)}
             >
               {actionsPaused ? "Resume" : "Pause"}
             </button>
@@ -324,6 +332,38 @@ export function TodayPage() {
                 )}
               </div>
               <Badge value={block.executionState} />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card
+        title="Newly detected candidates"
+        note="Evidence-backed candidates remain visible until you confirm or dismiss them."
+      >
+        <div className="row-list">
+          {data.candidates.length === 0 && (
+            <Empty>No unconfirmed candidates right now.</Empty>
+          )}
+          {data.candidates.map((candidate) => (
+            <div className="row" key={candidate.commitmentId}>
+              <div className="grow">
+                <div className="title">
+                  <Link
+                    className="commitment-link"
+                    to={`/commitments/${candidate.commitmentId}`}
+                  >
+                    {candidate.title}
+                  </Link>
+                </div>
+                <div className="sub">
+                  {candidate.ownershipType.replaceAll("_", " ")} · due{" "}
+                  {formatDateTime(candidate.deadline)}
+                  {candidate.confidence !== null &&
+                    ` · ${Math.round(candidate.confidence * 100)}% deadline confidence`}
+                </div>
+              </div>
+              <Badge value={candidate.lifecycleStatus} />
             </div>
           ))}
         </div>

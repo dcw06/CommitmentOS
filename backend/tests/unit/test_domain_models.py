@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from commitmentos.application.services.portfolio_planning import PortfolioPlanningService
 from commitmentos.contracts.observations import ObservationIdFactory, ObservationType
 from commitmentos.contracts.tasks import (
     ExecuteCalendarActionTaskV1,
@@ -26,6 +28,7 @@ from commitmentos.domain.commitments.models import (
     OwnershipType,
 )
 from commitmentos.domain.controls.models import ControlMode, initial_system_controls
+from commitmentos.domain.planning.models import TimeInterval
 from commitmentos.domain.progress.models import (
     UserEditState,
     WorkBlock,
@@ -83,6 +86,7 @@ def make_outbox(**overrides) -> ActionOutbox:
         expected_plan_revision=1,
         expected_projection_hash="",
         expected_control_epoch=1,
+        before_state=None,
         mutation=CalendarMutation(
             action_type=CalendarActionType.INSERT,
             calendar_id="primary",
@@ -232,6 +236,39 @@ class TestWorkBlockProgress:
 
 
 class TestOutboxStateMachine:
+    def test_pending_patch_before_state_remains_busy_for_planning(self) -> None:
+        base = make_outbox()
+        action = replace(
+            base,
+            mutation=replace(base.mutation, action_type=CalendarActionType.PATCH),
+            before_state={
+                "scheduled_start": NOW.isoformat(),
+                "scheduled_end": (NOW + timedelta(hours=1)).isoformat(),
+            },
+        )
+        busy = PortfolioPlanningService._pending_action_busy(
+            (action,),
+            TimeInterval(NOW - timedelta(hours=1), NOW + timedelta(hours=2)),
+        )
+        assert len(busy) == 1
+        assert busy[0].interval == TimeInterval(NOW, NOW + timedelta(hours=1))
+        assert busy[0].work_block_id is None
+
+    def test_pending_adoption_does_not_reserve_superseded_plan_interval(self) -> None:
+        base = make_outbox()
+        action = replace(
+            base,
+            mutation=replace(base.mutation, action_type=CalendarActionType.ADOPT),
+            before_state={
+                "scheduled_start": NOW.isoformat(),
+                "scheduled_end": (NOW + timedelta(hours=1)).isoformat(),
+            },
+        )
+        assert PortfolioPlanningService._pending_action_busy(
+            (action,),
+            TimeInterval(NOW - timedelta(hours=1), NOW + timedelta(hours=2)),
+        ) == ()
+
     def test_external_io_only_from_claimed(self) -> None:
         action = make_outbox()
         with pytest.raises(InvalidTransitionError):

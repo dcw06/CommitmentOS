@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from commitmentos.application.ports.unit_of_work import RepositorySet, UnitOfWork
+from commitmentos.application.queries.portfolio_view import portfolio_view
 from commitmentos.domain.audit.models import ActivityEvent
 from commitmentos.domain.commitments.models import Commitment
 from commitmentos.domain.progress.models import WorkBlock
@@ -20,6 +21,8 @@ class CommitmentDetail:
     evidence: tuple[Mapping[str, Any], ...]
     work_blocks: tuple[WorkBlock, ...]
     activity: tuple[ActivityEvent, ...]
+    portfolio: Mapping[str, Any] | None
+    pending_approvals: tuple[Mapping[str, Any], ...]
 
 
 class GetCommitment:
@@ -46,11 +49,25 @@ class GetCommitment:
                 )
                 if event.payload.get("commitment_id") == commitment_id
             )
+            plan = (
+                await repositories.planner_runs.get(
+                    commitment.projection.planner_run_id
+                )
+                if commitment.projection is not None
+                else None
+            )
+            pending_approvals = tuple(
+                item
+                for item in await repositories.approvals.list_pending(user_id)
+                if item.get("commitment_id") == commitment_id
+            )
             return CommitmentDetail(
                 commitment=commitment,
                 evidence=evidence,
                 work_blocks=work_blocks,
                 activity=related_activity,
+                portfolio=portfolio_view(commitment, plan),
+                pending_approvals=pending_approvals,
             )
 
         return await self._unit_of_work.read(_load)

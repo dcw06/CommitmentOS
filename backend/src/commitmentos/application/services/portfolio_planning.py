@@ -8,6 +8,11 @@ from commitmentos.application.ports.clock import Clock
 from commitmentos.application.ports.unit_of_work import RepositorySet, UnitOfWork
 from commitmentos.application.services.planning_inputs import PlanningInputReader
 from commitmentos.contracts.tasks import SourceType
+from commitmentos.domain.actions.models import (
+    ActionOutbox,
+    CalendarActionType,
+    ExecutionStatus,
+)
 from commitmentos.domain.commitments.models import Commitment, RiskLevel
 from commitmentos.domain.planning.calendar_state import (
     CalendarSnapshotReducer,
@@ -41,6 +46,7 @@ class PortfolioFacts:
     commitments: tuple[Commitment, ...]
     work_blocks: tuple[WorkBlock, ...]
     preferences_revision: int
+    pending_actions: tuple[ActionOutbox, ...]
 
 
 class PortfolioPlanningService:
@@ -85,6 +91,7 @@ class PortfolioPlanningService:
         horizon = self._planning_horizon(facts.commitments, now)
         calendar_state = await self._planning_inputs.load_calendar_state(user_id, horizon)
         busy = self._calendar_reducer.busy_intervals(calendar_state.events, horizon)
+        busy = tuple(busy) + self._pending_action_busy(facts.pending_actions, horizon)
         planner_input = self._planner_input(
             user_id,
             horizon,
@@ -108,6 +115,7 @@ class PortfolioPlanningService:
         horizon = self._planning_horizon(facts.commitments, now)
         calendar_state = await self._planning_inputs.load_calendar_state(user_id, horizon)
         busy = self._calendar_reducer.busy_intervals(calendar_state.events, horizon)
+        busy = tuple(busy) + self._pending_action_busy(facts.pending_actions, horizon)
         planner_input = self._planner_input(
             user_id,
             horizon,
@@ -211,6 +219,18 @@ class PortfolioPlanningService:
                     )
                 )
             user = await repositories.users.get(user_id)
+            pending_actions = await repositories.outbox.list_for_user_statuses(
+                user_id,
+                (
+                    ExecutionStatus.PENDING.value,
+                    ExecutionStatus.CLAIMED.value,
+                    ExecutionStatus.ACTION_IN_FLIGHT.value,
+                    ExecutionStatus.RETRYABLE_FAILED.value,
+                    ExecutionStatus.HELD_BY_CONTROL.value,
+                    ExecutionStatus.EXTERNAL_VERIFICATION_PENDING.value,
+                ),
+                250,
+            )
             return PortfolioFacts(
                 commitments=commitments,
                 work_blocks=tuple(
@@ -219,9 +239,60 @@ class PortfolioPlanningService:
                 preferences_revision=int(
                     (user or {}).get("planning_preferences_revision", 0)
                 ),
+                pending_actions=tuple(pending_actions),
             )
 
         return await self._unit_of_work.read(_load)
+
+    @staticmethod
+    def _pending_action_busy(
+        actions: Sequence[ActionOutbox],
+        horizon: TimeInterval,
+    ) -> tuple[CalendarBusyInterval, ...]:
+        """Reserve the before-side of unverified mutations as real capacity.
+
+        A desired patch is already represented by its work block. Until the
+        external mutation is observed, its old Calendar interval must also
+        remain unavailable or another commitment can be placed into capacity
+        the pending patch has not actually released.
+        """
+        intervals: list[CalendarBusyInterval] = []
+        for action in actions:
+            if action.mutation.action_type == CalendarActionType.ADOPT:
+                # Adoption acknowledges Calendar truth and performs no remote
+                # mutation, so its superseded plan interval is not capacity.
+                continue
+            before = action.before_state or {}
+            start_value = before.get("scheduled_start")
+            end_value = before.get("scheduled_end")
+            if not start_value or not end_value:
+                continue
+            start = (
+                start_value
+                if isinstance(start_value, datetime)
+                else datetime.fromisoformat(str(start_value).replace("Z", "+00:00"))
+            )
+            end = (
+                end_value
+                if isinstance(end_value, datetime)
+                else datetime.fromisoformat(str(end_value).replace("Z", "+00:00"))
+            )
+            interval = TimeInterval(start, end)
+            if not interval.overlaps(horizon):
+                continue
+            intervals.append(
+                CalendarBusyInterval(
+                    snapshot_id=f"pending-outbox:{action.outbox_id}",
+                    calendar_event_id=action.mutation.calendar_event_id,
+                    interval=interval,
+                    is_app_owned=True,
+                    # Deliberately unset: preservation must not filter this
+                    # old interval as though it were the desired work block.
+                    work_block_id=None,
+                    source_revision=action.attempts,
+                )
+            )
+        return tuple(intervals)
 
     @staticmethod
     def _planning_horizon(
@@ -426,7 +497,4 @@ class PortfolioPlanningService:
 
     @staticmethod
     def _priority(commitment: Commitment) -> int:
-        try:
-            return int(commitment.owner.get("priority", "0"))
-        except (TypeError, ValueError):
-            return 0
+        return commitment.explicit_priority

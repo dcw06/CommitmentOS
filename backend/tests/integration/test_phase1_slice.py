@@ -24,6 +24,7 @@ from conftest import (
 )
 
 from commitmentos.application.dto import CommandStatus, ControlChangeRequest
+from commitmentos.application.queries.get_system_status import GetSystemStatus
 from commitmentos.contracts.observations import ObservationType, ReconciliationStatus
 from commitmentos.contracts.tasks import SourceSyncTaskV1, SourceType
 from commitmentos.domain.actions.models import (
@@ -462,9 +463,40 @@ class TestCalendarPreconditions:
         ]
         assert len(failed_rows) == 1
         assert failed_rows[0]["attempts"] == 1
+        retrying_status = await GetSystemStatus(app.uow, app.clock).execute(
+            CONTROLLED_USER
+        )
+        assert "calendar_action_retrying" in {
+            item["state"] for item in retrying_status.failure_states
+        }
         action_results = [
             data
             for data in app.store["source_observations"].values()
             if data["observation_type"] == ObservationType.ACTION_RESULT.value
         ]
         assert len(action_results) == 2  # only the two successful inserts
+
+        failed_id = next(
+            outbox_id
+            for outbox_id, row in app.store["action_outbox"].items()
+            if row["execution_status"] == ExecutionStatus.RETRYABLE_FAILED.value
+        )
+        task = next(
+            task
+            for _, task in app.task_dispatcher.calendar_action_tasks
+            if task.outbox_id == failed_id
+        )
+        app.calendar_writer.retryable_failures_remaining = 4
+        exhausted = None
+        for _ in range(4):
+            exhausted = await app.executor.execute(task)
+        assert exhausted is not None
+        assert exhausted.status == CommandStatus.COMPLETED
+        assert exhausted.error_code == "calendar_action_failed"
+        failed = app.store["action_outbox"][failed_id]
+        assert failed["attempts"] == 5
+        assert failed["execution_status"] == ExecutionStatus.TERMINAL_FAILED.value
+        status = await GetSystemStatus(app.uow, app.clock).execute(CONTROLLED_USER)
+        assert "calendar_action_failed" in {
+            item["state"] for item in status.failure_states
+        }

@@ -108,7 +108,9 @@ def api(app: Phase1App) -> TestClient:
         PlansRouter(app.request_plan_undo, session, csrf).build()
     )
     fastapi_app.include_router(
-        CompletionRouter(app.complete_commitment, session, csrf).build()
+        CompletionRouter(
+            app.complete_commitment, app.change_commitment, session, csrf
+        ).build()
     )
     fastapi_app.include_router(
         DemoRouter(
@@ -424,6 +426,56 @@ class TestControlledMutationContracts:
         assert stored["verified_minutes"] == 45
         assert stored["execution_state"] == "completed"
 
+    async def test_commitment_lifecycle_change_is_revision_and_csrf_guarded(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        block = await _check_in_fixture(app)
+        path = f"/api/v1/commitments/{block.commitment_id}/lifecycle"
+        before = copy.deepcopy(app.store)
+        assert api.post(
+            path,
+            json={"expected_revision": 1, "target_status": "paused"},
+            cookies={"commitmentos_session": SESSION_TOKEN},
+        ).status_code == 403
+        assert app.store == before
+
+        response = api.post(
+            path,
+            json={"expected_revision": 1, "target_status": "paused"},
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": CSRF_SECRET},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        assert app.store["commitments"][block.commitment_id]["lifecycle_status"] == (
+            LifecycleStatus.PAUSED.value
+        )
+        observation_id = response.json()["identifiers"]["observation_id"]
+        assert app.store["source_observations"][observation_id][
+            "observation_type"
+        ] == "commitment_paused"
+
+    async def test_dismiss_supersedes_the_commitments_pending_confirmation(
+        self, api: TestClient, app: Phase1App
+    ) -> None:
+        approval = await _pending_approval(app)
+        commitment_id = approval["commitment_id"]
+        revision = app.store["commitments"][commitment_id]["revision"]
+
+        response = api.post(
+            f"/api/v1/commitments/{commitment_id}/lifecycle",
+            json={"expected_revision": revision, "target_status": "dismissed"},
+            cookies={"commitmentos_session": SESSION_TOKEN},
+            headers={"X-CSRF-Token": CSRF_SECRET},
+        )
+        assert response.status_code == 200
+        assert app.store["commitments"][commitment_id]["lifecycle_status"] == (
+            LifecycleStatus.DISMISSED.value
+        )
+        assert app.store["approvals"][approval["approval_id"]]["status"] == (
+            "superseded"
+        )
+
     async def test_plan_undo_is_guarded_and_only_creates_reconciliation_input(
         self,
         api: TestClient,
@@ -570,6 +622,18 @@ CONTROLLED_MUTATION_ROUTES = [
             "idempotency_key": "csrf-matrix",
             "completed_at": "2026-08-12T16:00:00+00:00",
         },
+    ),
+    (
+        "/api/v1/commitments/route-matrix-commitment/reopen",
+        {"expected_revision": 1},
+    ),
+    (
+        "/api/v1/commitments/route-matrix-commitment/priority",
+        {"expected_revision": 1, "priority": 10},
+    ),
+    (
+        "/api/v1/commitments/route-matrix-commitment/lifecycle",
+        {"expected_revision": 1, "target_status": "paused"},
     ),
 ]
 

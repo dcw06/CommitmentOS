@@ -9,6 +9,7 @@ from commitmentos.api.dependencies.google_oidc import (
 from commitmentos.application.commands.receive_gmail_signal import (
     MalformedSignalError,
     ReceiveGmailSignal,
+    SignalRateLimitError,
     UnexpectedMailboxError,
 )
 
@@ -52,6 +53,8 @@ class PubSubRouter:
                 ) from error
             except UnexpectedMailboxError as error:
                 raise HTTPException(status_code=403, detail="unexpected mailbox") from error
+            except SignalRateLimitError as error:
+                raise HTTPException(status_code=429, detail="rate limited") from error
             return Response(status_code=204)
 
         return router

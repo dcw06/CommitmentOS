@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+from datetime import datetime, timedelta
 from typing import Any, Mapping
 
 from commitmentos.application.dto import CommandResult, CommandStatus
@@ -18,6 +19,10 @@ class MalformedSignalError(ValueError):
 
 class UnexpectedMailboxError(ValueError):
     """The notification names a mailbox other than the controlled account."""
+
+
+class SignalRateLimitError(ValueError):
+    """A valid delivery exceeded the bounded change-signal fetch budget."""
 
 
 def bootstrap_generation_marker(latest_history_id: int) -> str:
@@ -50,6 +55,8 @@ class ReceiveGmailSignal:
         controlled_user_id: str,
         controlled_email: str,
         task_schema_version: str,
+        maximum_signals_per_window: int = 60,
+        rate_limit_window_seconds: int = 60,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._task_dispatcher = task_dispatcher
@@ -57,6 +64,8 @@ class ReceiveGmailSignal:
         self._controlled_user_id = controlled_user_id
         self._controlled_email = controlled_email
         self._task_schema_version = task_schema_version
+        self._maximum_signals_per_window = maximum_signals_per_window
+        self._rate_limit_window_seconds = rate_limit_window_seconds
 
     async def execute(
         self,
@@ -70,8 +79,21 @@ class ReceiveGmailSignal:
         now = self._clock.now()
         request_id = self._sync_request_id(self._controlled_user_id)
 
-        async def _coalesce(repositories: RepositorySet) -> int:
+        async def _coalesce(repositories: RepositorySet) -> int | None:
             current = await repositories.sync_requests.get(request_id)
+            window_started_at = (
+                current.get("rate_window_started_at") if current is not None else None
+            )
+            if not isinstance(window_started_at, datetime) or (
+                now - window_started_at
+                >= timedelta(seconds=self._rate_limit_window_seconds)
+            ):
+                window_started_at = now
+                rate_count = 0
+            else:
+                rate_count = int(current.get("rate_window_signal_count", 0))
+            if rate_count >= self._maximum_signals_per_window:
+                return None
             latest = history_id
             if current is not None:
                 latest = max(int(current.get("latest_history_id", 0)), history_id)
@@ -82,12 +104,16 @@ class ReceiveGmailSignal:
                     "user_id": self._controlled_user_id,
                     "latest_history_id": latest,
                     "status": "pending",
+                    "rate_window_started_at": window_started_at,
+                    "rate_window_signal_count": rate_count + 1,
                     "updated_at": now,
                 },
             )
             return latest
 
         latest_history_id = await self._unit_of_work.run(_coalesce)
+        if latest_history_id is None:
+            raise SignalRateLimitError("gmail change signal rate limited")
 
         # Task creation strictly after the durable commit; a failed enqueue
         # stays repairable through maintenance dispatch_pending.

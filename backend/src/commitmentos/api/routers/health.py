@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter
 
 from commitmentos.application.ports.unit_of_work import UnitOfWork
@@ -19,6 +17,3 @@ class HealthRouter:
 
     async def live(self) -> dict[str, str]:
         return {"status": "live", "version": self._application_version}
-
-    async def ready(self) -> Any:
-        ...

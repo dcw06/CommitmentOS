@@ -10,10 +10,30 @@ import {
   Routes,
 } from "react-router-dom";
 
-import { BASENAME, bootstrapSession, DEMO_MODE, logout } from "./api";
+import {
+  BASENAME,
+  bootstrapSession,
+  DEMO_MODE,
+  fetchSystemStatus,
+  logout,
+} from "./api";
+import { Badge, usePolling } from "./ui";
 import { ActivityPage } from "./views/activity";
 import { CommitmentDetailPage, CommitmentsPage } from "./views/commitments";
 import { TodayPage } from "./views/today";
+
+function LiveControlStatus() {
+  const { data, error } = usePolling(fetchSystemStatus, 8000);
+  if (error && !data) return <span className="status-error">Control status unavailable</span>;
+  if (!data) return <span className="status-loading">Loading controls…</span>;
+  return (
+    <div className="global-controls" aria-label="Live execution control status">
+      <span>Monitoring</span><Badge value={data.observationMode} />
+      <span>Actions</span><Badge value={data.automaticActionMode} />
+      <span>{data.heldActions} held · {data.inFlightActions} in flight</span>
+    </div>
+  );
+}
 
 function Shell() {
   const [ready, setReady] = useState(DEMO_MODE);
@@ -53,6 +73,7 @@ function Shell() {
         </nav>
         <div className="shell-spacer" />
         <div className="shell-status">
+          {!DEMO_MODE && <LiveControlStatus />}
           {!DEMO_MODE && (
             <button onClick={() => void logout()} title="Revoke this session">
               Sign out

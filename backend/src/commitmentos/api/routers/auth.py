@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -16,6 +16,11 @@ from commitmentos.application.ports.identity_verifier import IdentityVerifier
 from commitmentos.application.ports.oauth_client import OAuthClient
 from commitmentos.application.ports.unit_of_work import RepositorySet, UnitOfWork
 from commitmentos.contracts.auth import OAuthTransaction, OAuthTransactionStatus
+from commitmentos.domain.audit.models import (
+    ActivityEvent,
+    ActivityEventFactory,
+    ActivityEventType,
+)
 from commitmentos.domain.shared.errors import DomainError
 
 TRANSACTION_TTL = timedelta(minutes=10)
@@ -48,6 +53,7 @@ class AuthRouter:
         controlled_user_id: str,
         controlled_email: str,
         oauth_client_id: str,
+        activity_factory: ActivityEventFactory | None = None,
     ) -> None:
         self._oauth_client = oauth_client
         self._identity_verifier = identity_verifier
@@ -59,6 +65,7 @@ class AuthRouter:
         self._controlled_user_id = controlled_user_id
         self._controlled_email = controlled_email
         self._oauth_client_id = oauth_client_id
+        self._activity_factory = activity_factory or ActivityEventFactory()
 
     def build(self) -> APIRouter:
         router = APIRouter(tags=["auth"])
@@ -89,6 +96,12 @@ class AuthRouter:
             request: Request,
             actor: AuthenticatedActor = Depends(session),
         ) -> Response:
+            await handler._record_access(
+                "session_access",
+                "allowed",
+                getattr(request.state, "trace_id", "trace-unset"),
+                actor.user_id,
+            )
             return JSONResponse(
                 {
                     "authenticated": True,
@@ -125,8 +138,23 @@ class AuthRouter:
             )
             self._oauth_client.validate_granted_scopes(token_set)
         except Exception as error:
+            await self._record_access(
+                "login_callback",
+                "token_exchange_rejected",
+                getattr(request.state, "trace_id", "trace-unset"),
+                "anonymous",
+            )
             raise HTTPException(status_code=403, detail="token exchange failed") from error
-        await self._verify_callback_identity(token_set.id_token, transaction.nonce)
+        try:
+            await self._verify_callback_identity(token_set.id_token, transaction.nonce)
+        except HTTPException:
+            await self._record_access(
+                "login_callback",
+                "identity_rejected",
+                getattr(request.state, "trace_id", "trace-unset"),
+                "anonymous",
+            )
+            raise
 
         raw_session_id = self._id_generator.new_token(32)
         now = self._clock.now()
@@ -144,6 +172,14 @@ class AuthRouter:
             await repositories.web_sessions.create(
                 {"session_id_hash": session_id_hash, **session_document}
             )
+            await repositories.activity.append(
+                self._access_event(
+                    "login_callback",
+                    "allowed",
+                    getattr(request.state, "trace_id", "trace-unset"),
+                    self._controlled_user_id,
+                )
+            )
 
         await self._unit_of_work.run(_create)
         response: Response = RedirectResponse(transaction.return_to, status_code=302)
@@ -156,6 +192,14 @@ class AuthRouter:
 
         async def _revoke(repositories: RepositorySet) -> None:
             await repositories.web_sessions.revoke(session_id_hash, now)
+            await repositories.activity.append(
+                self._access_event(
+                    "logout",
+                    "allowed",
+                    getattr(request.state, "trace_id", "trace-unset"),
+                    actor.user_id,
+                )
+            )
 
         await self._unit_of_work.run(_revoke)
         response: Response = JSONResponse({"authenticated": False})
@@ -185,6 +229,15 @@ class AuthRouter:
             created = await repositories.oauth_transactions.create(transaction)
             if not created:
                 raise HTTPException(status_code=500, detail="state collision")
+            await repositories.activity.append(
+                self._access_event(
+                    "login_start",
+                    "allowed",
+                    f"oauth:{transaction.transaction_id}",
+                    "anonymous",
+                    created_at=now,
+                )
+            )
 
         await self._unit_of_work.run(_create)
         return transaction, state
@@ -245,3 +298,36 @@ class AuthRouter:
 
     def _clear_session_cookie(self, response: Response) -> None:
         response.delete_cookie(SESSION_COOKIE, path="/")
+
+    async def _record_access(
+        self,
+        operation: str,
+        outcome: str,
+        trace_id: str,
+        actor: str,
+    ) -> None:
+        async def _record(repositories: RepositorySet) -> None:
+            await repositories.activity.append(
+                self._access_event(operation, outcome, trace_id, actor)
+            )
+
+        await self._unit_of_work.run(_record)
+
+    def _access_event(
+        self,
+        operation: str,
+        outcome: str,
+        trace_id: str,
+        actor: str,
+        *,
+        created_at: datetime | None = None,
+    ) -> ActivityEvent:
+        return self._activity_factory.create(
+            user_id=self._controlled_user_id,
+            event_type=ActivityEventType.ACCESS_RECORDED,
+            trace_id=trace_id,
+            actor=actor,
+            summary=f"Access {operation}: {outcome}",
+            payload={"operation": operation, "outcome": outcome},
+            created_at=created_at or self._clock.now(),
+        )

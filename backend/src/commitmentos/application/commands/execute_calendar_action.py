@@ -32,6 +32,7 @@ from commitmentos.domain.commitments.models import Commitment
 from commitmentos.domain.progress.service import ProgressCalculator
 
 CLAIM_LEASE_SECONDS = 120
+MAX_CALENDAR_ACTION_ATTEMPTS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +99,21 @@ class ExecuteCalendarAction:
                 trace_id=claim.trace_id,
             )
         if outcome.outcome_type == CalendarMutationOutcomeType.RETRYABLE_FAILURE:
+            if claim.action.attempts >= MAX_CALENDAR_ACTION_ATTEMPTS:
+                exhausted = CalendarMutationOutcome(
+                    outcome_type=CalendarMutationOutcomeType.TERMINAL_FAILURE,
+                    event=None,
+                    error=dict(outcome.error or {})
+                    | {
+                        "error_code": "calendar_action_retry_exhausted",
+                        "attempts": claim.action.attempts,
+                    },
+                )
+                return await self._record_terminal_outcome(
+                    claim.action,
+                    exhausted,
+                    claim.trace_id,
+                )
             return await self._record_retryable_failure(claim.action, outcome)
         if outcome.outcome_type == CalendarMutationOutcomeType.PRECONDITION_FAILED:
             return await self._record_stale_precondition(claim.action, outcome, claim.trace_id)

@@ -101,6 +101,14 @@ class ObservationRepository(Protocol):
     async def list_held(self, user_id: str, limit: int) -> Sequence[ObservationV1]:
         ...
 
+    async def list_for_statuses(
+        self,
+        user_id: str,
+        reconciliation_statuses: Sequence[str],
+        limit: int,
+    ) -> Sequence[ObservationV1]:
+        ...
+
     async def list_staged_for_release(
         self,
         user_id: str,

@@ -273,6 +273,17 @@ class TestSessionLifecycle:
         body = response.json()
         assert body["authenticated"] is True
         assert body["csrf_token"] == stored["csrf_secret"]
+        access = [
+            row["payload"]
+            for row in auth.store["activity_events"].values()
+            if row["event_type"] == "access_recorded"
+        ]
+        assert {row["operation"] for row in access} == {
+            "login_start",
+            "login_callback",
+            "session_access",
+        }
+        assert all("email" not in row for row in access)
 
     def test_session_cookie_flags(self, auth: AuthHarness) -> None:
         state = auth.login()
@@ -295,6 +306,10 @@ class TestSessionLifecycle:
         )
         assert response.status_code == 200
         assert auth.me(token).status_code == 401
+        assert any(
+            row["payload"] == {"operation": "logout", "outcome": "allowed"}
+            for row in auth.store["activity_events"].values()
+        )
 
     def test_logout_requires_csrf(self, auth: AuthHarness) -> None:
         token = auth.complete_login()

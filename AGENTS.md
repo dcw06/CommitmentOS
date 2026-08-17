@@ -46,7 +46,7 @@ post and a build write-up.
 ## Verification commands
 
 ```bash
-.venv/bin/pytest                # full suite — 224 tests, must stay green
+.venv/bin/pytest                # full suite — 254 tests, must stay green
 .venv/bin/ruff check .          # must stay clean (repo enforces check, not format)
 cd frontend && npm run build    # tsc + vite; bundle served from frontend/dist
 ```
@@ -61,7 +61,7 @@ imports; do not chase them unless you touched the flagged files.
    address lives only in the gitignored `.env`. This repo is shared with
    hackathon judges.
 2. **Frozen artifacts:** `golden_scenario_rev_1`, `autonomy_policy_v1`,
-   `scope_set_v1`, and the recorded evidence JSON under `docs/`. Evidence files
+   `autonomy_policy_v2`, `scope_set_v1`, and the recorded evidence JSON under `docs/`. Evidence files
    are records — never regenerate, edit, or "clean up" past evidence. Scenario
    or policy changes require a revision bump plus a checklist decision-log
    entry.
@@ -89,22 +89,21 @@ resynchronization. Cloud Scheduler drives watch renewal, cursor catch-up,
 outbox/observation dispatch repair, and a once-a-minute safety reconciliation.
 Every decision lands on an audit timeline.
 
-## Known gaps (comprehensive plan-vs-code audit, 2026-08-17)
+## Post-audit source state (2026-08-17)
 
-Recorded so nobody rediscovers them as surprises; none block submission:
+The working source now contains a post-campaign hardening pass; see
+`docs/post_audit_hardening_progress.md`. It is newer than the deployed revision
+that produced `docs/phase5_evidence/`. Do not describe the hardening changes as
+live-verified until the owner reruns the deployment, golden campaign, and
+security probes and records a new evidence revision.
 
-- `backend/src/commitmentos/workflows/reconciliation/nodes/` and a few other
-  files are unwired `...` stubs mirroring plan §8.1 node names; the real
-  workflow lives in `phase1_workflow.py` behind a coarse ADK graph (documented
-  deviation).
-- Dashboard omits several plan-§14 surfaces: five-stat outcome strip wording,
-  a "newly detected candidates" section, portfolio allocation/shortfall/
-  projected-finish display, per-commitment pause/dismiss controls.
-- Gmail invalid-cursor recovery is operator-assisted (Calendar's is
-  automatic); the Calendar webhook does not check stored channel expiration;
-  `explain_decision` (plan §8.2 plain-language explanations) was never
-  implemented; `Commitment.reopen()` has no route; explicit user priority in
-  planner ordering is never written by anything.
-- README lacks plan-§19 sections on Gmail serialization/cursor recovery,
-  staging-generation write budgets, demo seed/reset commands, and the eval
-  command line.
+Remaining intentional scope gaps:
+
+- The dashboard still omits several plan-§14 presentation surfaces: the exact
+  five-stat outcome wording, a newly-detected section, portfolio allocation /
+  shortfall / projected-finish display, and per-commitment pause/dismiss.
+- Person/dependency behavior remains P1. `blocking_status` is therefore kept
+  `clear` instead of being misused for effort confirmation or capacity
+  shortfall; those conditions have their own visible fields and risk states.
+- README still needs a fuller operator appendix for staging write budgets,
+  demo reset, and the extraction-eval command before long-form publication.

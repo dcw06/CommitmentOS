@@ -26,6 +26,7 @@ from commitmentos.application.ports.calendar_writer import (
 from commitmentos.application.ports.gmail_reader import (
     GmailHistoryChange,
     GmailHistoryPage,
+    GmailMailboxPage,
     GmailMessage,
     GmailWatch,
     SourceAuthorizationError,
@@ -544,6 +545,7 @@ class FakeGmailReader:
         self.threads: dict[str, list[str]] = {}
         # page key: None for the first page, then the page token string.
         self.history_pages: dict[str | None, GmailHistoryPage] = {}
+        self.mailbox_pages: dict[str | None, GmailMailboxPage] = {}
         self.watch = GmailWatch(
             history_id="1000",
             expiration=datetime(2026, 8, 20, 17, 0, tzinfo=timezone.utc),
@@ -551,6 +553,7 @@ class FakeGmailReader:
         self.raise_auth_error = False
         self.raise_cursor_invalid = False
         self.history_calls: list[tuple[str, str | None]] = []
+        self.mailbox_calls: list[str | None] = []
         self.watch_calls = 0
 
     def add_message(
@@ -623,6 +626,19 @@ class FakeGmailReader:
             )
         return page
 
+    async def list_messages(self, user_id, page_token):
+        if self.raise_auth_error:
+            raise SourceAuthorizationError("scripted auth failure")
+        self.mailbox_calls.append(page_token)
+        page = self.mailbox_pages.get(page_token)
+        if page is not None:
+            return page
+        return GmailMailboxPage(
+            message_ids=tuple(sorted(self.messages)),
+            next_page_token=None,
+            latest_history_id=self.watch.history_id,
+        )
+
     async def get_message(self, user_id, message_id) -> GmailMessage | None:
         # None mirrors the live adapter for vanished messages (deleted or
         # discarded drafts referenced by an old history record).
@@ -674,4 +690,16 @@ class FakeModelInterpreter:
         )
 
     async def explain_decision(self, decision, evidence):
-        raise NotImplementedError
+        del evidence
+        return (
+            str(decision.get("fallback_explanation", "The plan was updated.")),
+            ModelInvocationMetadata(
+                model_id="fake-gemini",
+                prompt_version="explanation_v1",
+                schema_version="explanation_v1",
+                thinking_level="low",
+                latency_ms=5,
+                input_tokens=30,
+                output_tokens=15,
+            ),
+        )

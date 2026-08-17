@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Mapping
 
 from commitmentos.application.ports.clock import Clock
@@ -66,6 +67,18 @@ class CalendarChannelVerifier:
             raise CalendarChannelVerificationError(403, "unknown channel")
         self._constant_time_token_check(token, str(channel.get("token_hash") or ""))
         is_current = channel_id == channel.get("channel_id")
+        expected_status = (
+            channel.get("status") if is_current else channel.get("previous_status")
+        )
+        if expected_status not in ("active", "overlap"):
+            raise CalendarChannelVerificationError(403, "inactive channel")
+        expiration = (
+            channel.get("expiration")
+            if is_current
+            else channel.get("previous_expiration")
+        )
+        if self._expiration(expiration) <= self._clock.now().astimezone(timezone.utc):
+            raise CalendarChannelVerificationError(403, "expired channel")
         expected_resource = (
             channel.get("resource_id")
             if is_current
@@ -99,3 +112,20 @@ class CalendarChannelVerifier:
         consumed = await self._unit_of_work.run(_consume)
         if not consumed:
             raise CalendarChannelVerificationError(429, "rate limited")
+
+    @staticmethod
+    def _expiration(value: object) -> datetime:
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise CalendarChannelVerificationError(
+                    403, "invalid channel expiration"
+                ) from error
+        else:
+            raise CalendarChannelVerificationError(403, "missing channel expiration")
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise CalendarChannelVerificationError(403, "invalid channel expiration")
+        return parsed.astimezone(timezone.utc)

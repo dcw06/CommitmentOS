@@ -12,6 +12,7 @@ from commitmentos.api.routers.auth import AuthRouter
 from commitmentos.api.routers.calendar_webhook import CalendarWebhookRouter
 from commitmentos.api.routers.dashboard import DashboardRouter
 from commitmentos.api.routers.demo import DemoRouter
+from commitmentos.application.commands.change_commitment import ChangeCommitment
 from commitmentos.application.commands.change_system_control import ChangeSystemControl
 from commitmentos.application.commands.complete_commitment import CompleteCommitment
 from commitmentos.application.commands.execute_calendar_action import ExecuteCalendarAction
@@ -57,7 +58,7 @@ from commitmentos.infrastructure.google.oidc_verifier import GoogleIdentityVerif
 from commitmentos.infrastructure.messaging.cloud_tasks import CloudTasksDispatcher
 from commitmentos.infrastructure.static_demo import StaticDemoReadModel
 from commitmentos.workflows.reconciliation.graph import AdkReconciliationWorkflow
-from commitmentos.workflows.reconciliation.phase1_workflow import SeededReconciliationWorkflow
+from commitmentos.workflows.reconciliation.phase1_workflow import DurableReconciliationWorkflow
 
 
 class SystemClock:
@@ -114,6 +115,7 @@ class ControlledCommandCapabilities:
     record_work_check_in: RecordWorkCheckIn
     request_plan_undo: RequestPlanUndo
     complete_commitment: CompleteCommitment
+    change_commitment: ChangeCommitment
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +226,7 @@ class ApplicationContainer:
             self._task_dispatcher,
             settings.task_schema_version,
         )
-        inner_workflow = SeededReconciliationWorkflow(
+        inner_workflow = DurableReconciliationWorkflow(
             self._unit_of_work,
             self._outbox_dispatcher,
             self.clock,
@@ -237,7 +239,7 @@ class ApplicationContainer:
         )
         # Production reconciliation runs through the ADK Workflow graph; the
         # inner route object is what integration tests execute directly.
-        self._workflow = AdkReconciliationWorkflow(inner_workflow, self._unit_of_work)
+        self._workflow = AdkReconciliationWorkflow(inner_workflow)
         self._identity_verifier = GoogleIdentityVerifier()
 
     def _gemini_client(self):  # noqa: ANN202 - lazy third-party client
@@ -433,6 +435,12 @@ class ApplicationContainer:
                 self._observation_dispatcher,
                 self.clock,
             ),
+            change_commitment=ChangeCommitment(
+                self._unit_of_work,
+                self._observation_factory,
+                self._observation_dispatcher,
+                self.clock,
+            ),
         )
 
     def planning_inputs(self) -> PlanningInputCapabilities:
@@ -517,6 +525,3 @@ class ApplicationContainer:
                 "scheduler",
             ),
         )
-
-    def close(self) -> None:
-        ...
