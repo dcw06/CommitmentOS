@@ -174,8 +174,10 @@ class Commitment:
         )
 
     def confirm_effort(self, minutes: int, at: datetime) -> Commitment:
-        if minutes <= 0:
-            raise InvalidTransitionError("confirmed effort must be a positive number of minutes")
+        if minutes < 30 or minutes % 15 != 0:
+            raise InvalidTransitionError(
+                "confirmed effort must be at least 30 minutes in 15-minute increments"
+            )
         if self.lifecycle_status == LifecycleStatus.COMPLETED:
             raise InvalidTransitionError("cannot confirm effort on a completed commitment")
         return replace(
@@ -199,6 +201,11 @@ class Commitment:
             lifecycle_status=LifecycleStatus.COMPLETED,
             completion_evidence_id=evidence_id,
             completed_at=at,
+            # A projection is only current for the authoritative revision it
+            # was calculated from. Completion is a new terminal revision, so
+            # retaining the former on-track/remaining-work projection would
+            # expose contradictory state until a planner happened to run.
+            projection=None,
             revision=self.revision + 1,
             updated_at=at,
         )

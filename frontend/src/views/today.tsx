@@ -25,6 +25,9 @@ const APPROVAL_TITLES: Record<string, string> = {
   initial_plan_approval: "Approve the first Calendar plan",
   action_approval: "Approve an out-of-policy repair",
   identity_confirmation: "Confirm an ambiguous commitment",
+  deadline_change_confirmation: "Accept a proposed deadline change",
+  deadline_required_confirmation: "Add the missing deadline",
+  retraction_confirmation: "Confirm an explicit retraction",
   calendar_invalid_move_decision: "Decide on an invalid manual move",
   calendar_user_deleted_decision: "Decide what happens to a deleted block",
 };
@@ -61,9 +64,14 @@ export function ApprovalCard({
       ? approval.payload.proposed_minutes
       : 60;
   const [minutes, setMinutes] = useState(proposed);
+  const [deadline, setDeadline] = useState("");
   const reasons = Array.isArray(approval.payload.reason_codes)
     ? approval.payload.reason_codes.join(", ")
     : "";
+  const previousRejectionReason =
+    typeof approval.payload.previous_rejection_reason === "string"
+      ? approval.payload.previous_rejection_reason
+      : "";
   const title = APPROVAL_TITLES[approval.requestType] ?? approval.requestType;
 
   // Calendar decisions carry their valid choices in the approval payload;
@@ -83,6 +91,22 @@ export function ApprovalCard({
     approval.requestType === "identity_confirmation" &&
     proposal?.ownership_type === "ambiguous";
   const [ownership, setOwnership] = useState<string>("my_commitment");
+  const deadlineProposal = proposal?.deadline as
+    | Record<string, unknown>
+    | undefined;
+  const deadlineExpression =
+    typeof deadlineProposal?.source_expression === "string"
+      ? deadlineProposal.source_expression
+      : "the proposed date";
+  const needsDeadline =
+    approval.requestType === "deadline_required_confirmation";
+  const validMinutes =
+    Number.isInteger(minutes) &&
+    minutes >= 30 &&
+    minutes <= 2400 &&
+    minutes % 15 === 0;
+  const validDeadline =
+    Boolean(deadline) && !Number.isNaN(new Date(deadline).getTime());
 
   const approveDecision = () => {
     const decision: Parameters<typeof resolveApproval>[1] = {
@@ -90,6 +114,9 @@ export function ApprovalCard({
     };
     if (approval.requestType === "effort_confirmation") {
       decision.confirmedMinutes = minutes;
+    }
+    if (needsDeadline && validDeadline) {
+      decision.deadline = new Date(deadline).toISOString();
     }
     if (isCalendarDecision) decision.choice = choice;
     if (needsOwnership) decision.ownershipType = ownership;
@@ -110,12 +137,20 @@ export function ApprovalCard({
           (needsOwnership
             ? "The interpreter could not resolve who owns this commitment. Pick the ownership that matches the thread, or reject to dismiss the span."
             : "Confirm whether this detected commitment is real; rejecting dismisses the source span durably.")}
+        {approval.requestType === "deadline_change_confirmation" &&
+          `A counterparty proposed “${deadlineExpression}”. Your current deadline remains binding unless you accept this change.`}
+        {approval.requestType === "deadline_required_confirmation" &&
+          "The commitment has no usable deadline. Choose one before it can be created or scheduled."}
+        {approval.requestType === "retraction_confirmation" &&
+          "This message appears to retract an existing commitment. Confirm to cancel it, or reject to keep it open."}
         {approval.requestType === "calendar_invalid_move_decision" &&
           "A manual Calendar move violates hard constraints. The observed event is preserved until you choose."}
         {approval.requestType === "calendar_user_deleted_decision" &&
           "You deleted an app-owned block. Nothing is recreated until you decide what the deletion meant."}
         {!(approval.requestType in APPROVAL_TITLES) &&
           JSON.stringify(approval.payload).slice(0, 240)}
+        {previousRejectionReason &&
+          ` Your previous rejection reason: ${previousRejectionReason}.`}
       </div>
       {DEMO_MODE ? (
         <Badge value="pending" />
@@ -124,11 +159,19 @@ export function ApprovalCard({
           {approval.requestType === "effort_confirmation" && (
             <input
               type="number"
-              min={15}
+              min={30}
               step={15}
               value={minutes}
               onChange={(event) => setMinutes(Number(event.target.value))}
               aria-label="confirmed minutes"
+            />
+          )}
+          {needsDeadline && (
+            <input
+              type="datetime-local"
+              value={deadline}
+              onChange={(event) => setDeadline(event.target.value)}
+              aria-label="commitment deadline"
             />
           )}
           {isCalendarDecision && (
@@ -159,11 +202,20 @@ export function ApprovalCard({
           )}
           <button
             className="primary"
-            disabled={busy || (isCalendarDecision && !choice)}
+            disabled={
+              busy ||
+              (isCalendarDecision && !choice) ||
+              (approval.requestType === "effort_confirmation" && !validMinutes) ||
+              (needsDeadline && !validDeadline)
+            }
             onClick={() => run(approveDecision)}
           >
             {approval.requestType === "effort_confirmation"
               ? `Confirm ${minutesLabel(minutes)}`
+              : approval.requestType === "deadline_change_confirmation"
+                ? "Accept deadline"
+              : needsDeadline
+                ? "Confirm deadline"
               : "Approve"}
           </button>
           <button

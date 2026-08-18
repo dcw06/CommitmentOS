@@ -14,7 +14,7 @@ Contracts probed:
   oidc       every internal route group rejects wrong audience and wrong
              identity before any work (impersonated real tokens).
   demo       every production mutation method/path under /demo is rejected.
-  sandbox    the interactive sandbox is isolated, deck-bound, and leaks nothing.
+  sandbox    the interactive sandbox is isolated, bounded, and leaks nothing.
   ratelimit  over-limit valid webhook signals return 429 (needs a live
              channel; skipped with a note if none is registered).
 
@@ -362,6 +362,15 @@ class SecurityDriver:
                 forged.status_code == 409,
                 f"HTTP {forged.status_code}",
             )
+            anonymous_message = await client.post(
+                f"{self.service_url}/sandbox/api/messages",
+                json={"sender": "jordan", "message": "Can you help?"},
+            )
+            check(
+                "custom sandbox messages require a session",
+                anonymous_message.status_code == 409,
+                f"HTTP {anonymous_message.status_code}",
+            )
 
             opened = await client.post(f"{self.service_url}/sandbox/api/session")
             check(
@@ -373,6 +382,18 @@ class SecurityDriver:
                 return
             session_id = opened.json()["sessionId"]
             headers = {"X-Sandbox-Session": session_id}
+            selected = await client.post(
+                f"{self.service_url}/sandbox/api/mode",
+                headers=headers,
+                json={"mode": "guided"},
+            )
+            if selected.status_code != 200:
+                check(
+                    "sandbox guided lane can be selected",
+                    False,
+                    f"HTTP {selected.status_code}",
+                )
+                return
 
             unknown = await client.post(
                 f"{self.service_url}/sandbox/api/cards/arbitrary_input", headers=headers
@@ -381,6 +402,26 @@ class SecurityDriver:
                 "sandbox rejects cards outside the fixed deck",
                 unknown.status_code == 404,
                 f"HTTP {unknown.status_code}",
+            )
+            forged_sender = await client.post(
+                f"{self.service_url}/sandbox/api/messages",
+                headers=headers,
+                json={"sender": "controlled-01", "message": "Can you help?"},
+            )
+            check(
+                "sandbox rejects caller-defined message identities",
+                forged_sender.status_code == 422,
+                f"HTTP {forged_sender.status_code}",
+            )
+            oversized = await client.post(
+                f"{self.service_url}/sandbox/api/messages",
+                headers=headers,
+                json={"sender": "jordan", "message": "x" * 1001},
+            )
+            check(
+                "sandbox rejects oversized custom messages before interpretation",
+                oversized.status_code == 422,
+                f"HTTP {oversized.status_code}",
             )
             out_of_order = await client.post(
                 f"{self.service_url}/sandbox/api/cards/check_in", headers=headers

@@ -56,6 +56,8 @@ class ApprovalsRouter:
             decision["reason"] = request.reason
         if request.confirmed_minutes is not None:
             decision["confirmed_minutes"] = request.confirmed_minutes
+        if request.deadline is not None:
+            decision["deadline"] = request.deadline.isoformat()
         if request.ownership_type is not None:
             decision["ownership_type"] = request.ownership_type
         if request.choice is not None:

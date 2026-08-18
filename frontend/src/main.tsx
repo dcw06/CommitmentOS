@@ -46,7 +46,9 @@ function SandboxShell() {
       <div className="demo-banner sandbox-banner">
         <strong>Interactive sandbox</strong> — the real agent running on a
         simulated inbox and calendar that exist only in your session. No Google
-        account, no live data, nothing you do here leaves it.
+        account or controlled-user data is used. Free-play text is sent to a
+        sandbox-only Gemini key for live interpretation, held in this process
+        until reset/expiry, and never written to Firestore or shared caches.
       </div>
       <header className="shell-header">
         <div className="brand">

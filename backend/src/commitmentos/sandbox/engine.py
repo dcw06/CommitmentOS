@@ -10,6 +10,7 @@ the production stack inside `SandboxWorld`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -21,18 +22,21 @@ from commitmentos.application.commands.record_work_check_in import WorkCheckInRe
 from commitmentos.sandbox.scenario import (
     ACTIONS,
     CARDS_BY_ID,
+    FREE_PLAY_THREAD_ID,
+    JORDAN,
     MESSAGE_IDS,
     MESSAGES,
     THREAD_ID,
     THREAD_SUBJECT,
+    YOU,
     ActionCard,
     MessageCard,
 )
-from commitmentos.sandbox.session import SandboxSession
+from commitmentos.sandbox.session import SandboxMode, SandboxSession
 from commitmentos.sandbox.world import SANDBOX_CALENDAR_ID, SANDBOX_USER, SandboxWorld
 
 CONFLICT_EVENT_ID = "sandbox-conflict-meeting"
-CONFLICT_SUMMARY = "Platform review prep (booked by someone else)"
+CONFLICT_SUMMARY = "New meeting (sandbox experiment)"
 
 
 class SandboxCardError(RuntimeError):
@@ -71,25 +75,229 @@ async def _play_message(world: SandboxWorld, card: MessageCard) -> CardOutcome:
     sent_at = world.started_at + timedelta(minutes=card.offset_minutes)
     if world.clock.now() < sent_at:
         world.clock.current = sent_at
-    world.gmail.add_message(
+    return await _deliver_thread_message(
+        world,
         message_id=message_id,
+        persona=card.persona,
+        sender=card.sender,
+        body=card.body,
         thread_id=THREAD_ID,
-        internal_date=sent_at,
         subject=THREAD_SUBJECT,
-        body_text=card.body,
-        label_ids=("SENT",) if card.persona == "you" else ("INBOX",),
-        headers={"from": card.sender},
+        sent_at=sent_at,
+        outcome_id=card.card_id,
+        guided_card_id=card.card_id,
+        authored_note=card.note,
     )
-    before = _commitment_count(world)
-    await world.deliver_message(message_id, THREAD_ID)
-    after = _commitment_count(world)
-    if after > before:
-        headline = "A new commitment was extracted from the thread"
-    elif after == before and before > 0:
-        headline = "The existing commitment was revised, not duplicated"
+
+
+async def play_custom_message(
+    session: SandboxSession,
+    message_id: str,
+    persona: str,
+    body: str,
+) -> CardOutcome:
+    """Deliver one judge-authored message through the real Gmail workflow."""
+    if persona not in {"you", "jordan"}:
+        raise SandboxCardError("unknown message sender")
+    if session.mode is not SandboxMode.FREE_PLAY or not session.thread_subject:
+        raise SandboxCardError("choose free play and a subject first")
+    world = session.world
+    latest = max(
+        (message.internal_date for message in world.gmail.messages.values()),
+        default=world.clock.now(),
+    )
+    sent_at = max(world.clock.now(), latest) + timedelta(minutes=1)
+    world.clock.current = sent_at
+    outcome = await _deliver_thread_message(
+        world,
+        message_id=message_id,
+        persona=persona,
+        sender=YOU if persona == "you" else JORDAN,
+        body=body,
+        thread_id=FREE_PLAY_THREAD_ID,
+        subject=session.thread_subject,
+        sent_at=sent_at,
+        outcome_id=message_id,
+        guided_card_id=None,
+        authored_note=None,
+    )
+    _set_interpretation_retryability(session, message_id, "sandbox-1")
+    return outcome
+
+
+async def retry_custom_message(
+    session: SandboxSession,
+    message_id: str,
+    attempt: int,
+) -> CardOutcome:
+    """Re-run live interpretation for one rejected message without resending it."""
+
+    if session.mode is not SandboxMode.FREE_PLAY or not session.thread_subject:
+        raise SandboxCardError("choose free play and a subject first")
+    thread_message = next(
+        (
+            message
+            for message in session.thread_messages
+            if message.message_id == message_id and message.custom
+        ),
+        None,
+    )
+    gmail_message = session.world.gmail.messages.get(message_id)
+    if thread_message is None or gmail_message is None:
+        raise SandboxCardError("custom message is no longer available")
+    producer_version = f"sandbox-retry-{attempt}"
+    outcome = await _deliver_thread_message(
+        session.world,
+        message_id=message_id,
+        persona=thread_message.persona,
+        sender=thread_message.sender,
+        body=thread_message.body,
+        thread_id=FREE_PLAY_THREAD_ID,
+        subject=thread_message.subject,
+        sent_at=gmail_message.internal_date,
+        outcome_id=message_id,
+        guided_card_id=None,
+        authored_note=None,
+        add_to_mailbox=False,
+        producer_version=producer_version,
+    )
+    _set_interpretation_retryability(session, message_id, producer_version)
+    return outcome
+
+
+async def _deliver_thread_message(
+    world: SandboxWorld,
+    *,
+    message_id: str,
+    persona: str,
+    sender: str,
+    body: str,
+    thread_id: str,
+    subject: str,
+    sent_at: datetime,
+    outcome_id: str,
+    guided_card_id: str | None,
+    authored_note: str | None,
+    add_to_mailbox: bool = True,
+    producer_version: str = "sandbox-1",
+) -> CardOutcome:
+    if add_to_mailbox:
+        world.gmail.add_message(
+            message_id=message_id,
+            thread_id=thread_id,
+            internal_date=sent_at,
+            subject=subject,
+            body_text=body,
+            label_ids=("SENT",) if persona == "you" else ("INBOX",),
+            headers={"from": sender},
+        )
+    before = _commitment_snapshot(world)
+    before_approvals = _pending_approval_snapshot(world)
+    interpreter = world.interpreter
+    if guided_card_id is None:
+        begin = getattr(interpreter, "begin_custom_message", None)
     else:
-        headline = "The message was interpreted"
-    return CardOutcome(card.card_id, headline, card.note)
+        begin = getattr(interpreter, "begin_guided_message", None)
+    end = getattr(interpreter, "end_message", None)
+    if callable(begin):
+        begin() if guided_card_id is None else begin(guided_card_id)
+    try:
+        await world.deliver_message(
+            message_id,
+            thread_id,
+            producer_version=producer_version,
+        )
+    finally:
+        if callable(end):
+            end()
+    after = _commitment_snapshot(world)
+    after_approvals = _pending_approval_snapshot(world)
+    added = set(after) - set(before)
+    changed = {
+        commitment_id
+        for commitment_id in set(before) & set(after)
+        if before[commitment_id] != after[commitment_id]
+    }
+    new_approvals = set(after_approvals) - set(before_approvals)
+    confirmation_paused = any(
+        after_approvals[approval_id]
+        in {"identity_confirmation", "deadline_change_confirmation"}
+        for approval_id in new_approvals
+    )
+    canceled = {
+        commitment_id
+        for commitment_id in set(before) & set(after)
+        if before[commitment_id][3] != "canceled"
+        and after[commitment_id][3] == "canceled"
+    }
+    custom = guided_card_id is None
+    if added and before:
+        headline = "A separate commitment candidate was created"
+        detail = (
+            "This message did not revise the existing commitment. The agent "
+            "created another candidate, so the divergence is shown explicitly."
+        )
+    elif added:
+        headline = "A new commitment was extracted from the thread"
+        detail = authored_note or (
+            "The live interpreter found evidence in this message and the "
+            "deterministic workflow created a new candidate."
+        )
+    elif canceled:
+        headline = "The explicit retraction canceled the existing commitment"
+        detail = (
+            "The explicit retraction canceled the existing commitment without "
+            "creating another one."
+        )
+    elif confirmation_paused:
+        headline = "The agent paused for confirmation before changing anything"
+        detail = (
+            "The interpretation did not clear the deterministic identity or "
+            "policy boundary, so no commitment revision was claimed."
+        )
+    elif changed:
+        headline = "The existing commitment was revised, not duplicated"
+        detail = authored_note or (
+            "The message was connected to existing durable state and applied "
+            "as a revision rather than a duplicate."
+        )
+    elif new_approvals:
+        headline = "The agent paused for confirmation before changing anything"
+        detail = (
+            "The interpretation did not clear the deterministic identity or "
+            "policy boundary, so no commitment revision was claimed."
+        )
+    else:
+        headline = "The message produced no commitment change"
+        if custom and getattr(interpreter, "last_source", "") == "custom-unavailable":
+            detail = (
+                "Live interpretation was unavailable or rejected this message. "
+                "No canned interpretation was substituted."
+            )
+        else:
+            detail = (
+                "The thread was interpreted, but durable commitment state did not change."
+            )
+    return CardOutcome(outcome_id, headline, detail)
+
+
+def _set_interpretation_retryability(
+    session: SandboxSession,
+    message_id: str,
+    producer_version: str,
+) -> None:
+    """Offer one retry only when deterministic validation rejected this run."""
+
+    rejected = any(
+        row.get("producer_id") == f"{SANDBOX_USER}:{message_id}"
+        and row.get("producer_version") == producer_version
+        and row.get("reconciliation_status") == "rejected"
+        for row in session.world.store.get("source_observations", {}).values()
+    )
+    if rejected and session.interpretation_retry_counts.get(message_id, 0) < 1:
+        session.retryable_message_ids.add(message_id)
+    else:
+        session.retryable_message_ids.discard(message_id)
 
 
 async def _play_action(world: SandboxWorld, card: ActionCard) -> CardOutcome:
@@ -101,7 +309,7 @@ async def _play_action(world: SandboxWorld, card: ActionCard) -> CardOutcome:
 
 
 async def _play_conflict(world: SandboxWorld, card: ActionCard) -> CardOutcome:
-    target = _next_planned_block(world)
+    target = _next_planned_block(world, future_only=True)
     if target is None:
         raise SandboxCardError("no planned block to conflict with")
     block_id, block = target
@@ -125,7 +333,12 @@ async def _play_conflict(world: SandboxWorld, card: ActionCard) -> CardOutcome:
 
 async def _play_advance(world: SandboxWorld, card: ActionCard) -> CardOutcome:
     blocks = _blocks(world)
-    planned = [row for _, row in blocks if row["execution_state"] == "planned"]
+    planned = [
+        row
+        for _, row in blocks
+        if row["execution_state"] == "planned"
+        and row["scheduled_end"] > world.clock.now()
+    ]
     if not planned:
         raise SandboxCardError("no planned block to elapse")
     earliest_end = min(row["scheduled_end"] for row in planned)
@@ -152,13 +365,14 @@ async def _play_check_in(world: SandboxWorld, card: ActionCard) -> CardOutcome:
     if not awaiting:
         raise SandboxCardError("no block is awaiting a check-in")
     block_id, row = awaiting[0]
+    verified_minutes = min(60, int(row["duration_minutes"]))
     result = await world.record_work_check_in.execute(
         world.actor(),
         WorkCheckInRequest(
             work_block_id=block_id,
             idempotency_key=f"sandbox-check-in-{block_id}",
             completed=True,
-            verified_minutes=60,
+            verified_minutes=verified_minutes,
             checked_in_at=world.clock.now(),
             expected_revision=row["revision"],
         ),
@@ -168,7 +382,13 @@ async def _play_check_in(world: SandboxWorld, card: ActionCard) -> CardOutcome:
     if result.error_code:
         raise SandboxCardError(f"check-in rejected: {result.error_code}")
     return CardOutcome(
-        card.card_id, "60 verified minutes recorded against the plan", card.note
+        card.card_id,
+        f"{verified_minutes} verified minutes recorded against the plan",
+        (
+            f"Progress is only what you confirm. {verified_minutes} verified "
+            "minutes reduce the remaining work; nothing is inferred from "
+            "the calendar."
+        ),
     )
 
 
@@ -180,17 +400,14 @@ async def _play_check_in(world: SandboxWorld, card: ActionCard) -> CardOutcome:
 async def resolve_approval(
     session: SandboxSession,
     approval_id: str,
-    decision: str,
-    confirmed_minutes: int | None,
+    decision: Mapping[str, Any],
 ) -> None:
     world = session.world
     pending = await _pending_approvals(world)
     match = next((row for row in pending if row["approval_id"] == approval_id), None)
     if match is None:
         raise SandboxCardError("approval is no longer pending")
-    payload: dict[str, Any] = {"decision": decision}
-    if confirmed_minutes is not None:
-        payload["confirmed_minutes"] = confirmed_minutes
+    payload = dict(decision)
     result = await world.resolve_approval.execute(
         world.actor(),
         approval_id,
@@ -220,7 +437,7 @@ async def complete_commitment(session: SandboxSession, commitment_id: str) -> No
             idempotency_key=f"sandbox-complete-{commitment_id}",
             completed_at=world.clock.now(),
             expected_revision=document["revision"],
-            note="Sent the vendor comparison deck to Jordan.",
+            note=f"Completed: {document.get('title', 'sandbox commitment')}.",
         ),
         "trace-sandbox-complete",
     )
@@ -239,6 +456,12 @@ async def render(session: SandboxSession) -> dict[str, Any]:
     approvals = await _pending_approvals(world)
     return {
         "sessionId": session.session_id,
+        "mode": session.mode.value,
+        "threadSubject": session.thread_subject,
+        "customMessagesRemaining": max(
+            session.custom_message_limit - session.custom_messages_sent,
+            0,
+        ),
         "now": world.clock.now().isoformat(),
         "interpretationSource": session.world.interpreter.last_source
         if hasattr(session.world.interpreter, "last_source")
@@ -247,7 +470,7 @@ async def render(session: SandboxSession) -> dict[str, Any]:
         "cards": available_cards(session),
         "commitments": _commitments_view(world),
         "blocks": _blocks_view(world),
-        "approvals": [_approval_view(row) for row in approvals],
+        "approvals": [_approval_view(world, row) for row in approvals],
         "activity": _activity_view(world),
         "calendar": _calendar_view(world),
     }
@@ -262,14 +485,28 @@ def available_cards(session: SandboxSession) -> list[dict[str, Any]]:
     waiting, so a judge can see what the system is waiting for.
     """
     world = session.world
+    if session.mode is SandboxMode.UNSELECTED:
+        return []
+    if session.mode is SandboxMode.FREE_PLAY:
+        return _free_play_action_cards(session)
     played = set(session.cards_played)
     entries: list[dict[str, Any]] = []
+    pending_approval = _has_pending_approvals(world)
+    has_planned = _next_planned_block(world) is not None
 
     next_message = next((card for card in MESSAGES if card.card_id not in played), None)
     for card in MESSAGES:
         if card.card_id in played:
             continue
         is_next = next_message is not None and card.card_id == next_message.card_id
+        reason = None if is_next else "Send the earlier message first"
+        if is_next and card.card_id == "msg_deadline_change":
+            if pending_approval:
+                is_next = False
+                reason = "Resolve the pending confirmation first"
+            elif not has_planned:
+                is_next = False
+                reason = "Confirm the effort and approve the first plan"
         entries.append(
             {
                 "card_id": card.card_id,
@@ -278,26 +515,43 @@ def available_cards(session: SandboxSession) -> list[dict[str, Any]]:
                 "label": card.label,
                 "body": card.body,
                 "available": is_next,
-                "blocked_reason": None if is_next else "Send the earlier message first",
+                "blocked_reason": None if is_next else reason,
             }
         )
 
-    has_planned = _next_planned_block(world) is not None
     has_awaiting = any(
         row["execution_state"] == "awaiting_check_in" for _, row in _blocks(world)
     )
+    messages_complete = all(card.card_id in played for card in MESSAGES)
     conflict_played = "event_conflict" in played
+    advance_played = "advance_clock" in played
     for card in ACTIONS:
         if card.card_id in played:
             continue
         if card.kind == "conflict":
-            available, reason = has_planned, "Approve a plan first — there is nothing to conflict with"
+            available = messages_complete and not pending_approval and has_planned
+            if not messages_complete:
+                reason = "Finish the thread first"
+            elif pending_approval:
+                reason = "Resolve the pending confirmation first"
+            else:
+                reason = "There is no future reserved block to conflict with"
         elif card.kind == "advance":
-            available, reason = has_planned, "There is no reserved block to elapse yet"
+            available = conflict_played and not pending_approval and has_planned
+            if not conflict_played:
+                reason = "Create the calendar conflict first"
+            elif pending_approval:
+                reason = "Resolve the pending confirmation first"
+            else:
+                reason = "There is no reserved block to elapse yet"
         else:
-            available, reason = has_awaiting, "Fast-forward past a block first"
-        if card.kind == "advance" and has_planned and not conflict_played:
-            reason = None
+            available = advance_played and not pending_approval and has_awaiting
+            if not advance_played:
+                reason = "Fast-forward past a block first"
+            elif pending_approval:
+                reason = "Resolve the pending confirmation first"
+            else:
+                reason = "No block is awaiting a check-in"
         entries.append(
             {
                 "card_id": card.card_id,
@@ -312,22 +566,134 @@ def available_cards(session: SandboxSession) -> list[dict[str, Any]]:
     return entries
 
 
-def _thread_view(session: SandboxSession) -> list[dict[str, Any]]:
+def _free_play_action_cards(session: SandboxSession) -> list[dict[str, Any]]:
+    """Expose the real repair/check-in loop once free-play creates a plan."""
+
+    world = session.world
     played = set(session.cards_played)
-    messages = []
-    for card in MESSAGES:
-        if card.card_id not in played:
+    pending_approval = _has_pending_approvals(world)
+    has_planned = _next_planned_block(world) is not None
+    has_awaiting = any(
+        row["execution_state"] == "awaiting_check_in" for _, row in _blocks(world)
+    )
+    conflict_played = "event_conflict" in played
+    advance_played = "advance_clock" in played
+    awaiting_duration = next(
+        (
+            int(row["duration_minutes"])
+            for _, row in _blocks(world)
+            if row["execution_state"] == "awaiting_check_in"
+        ),
+        None,
+    )
+
+    entries: list[dict[str, Any]] = []
+    for card in ACTIONS:
+        if card.card_id in played:
             continue
-        messages.append(
+        label = card.label
+        if card.kind == "conflict":
+            available = not pending_approval and has_planned
+            reason = (
+                "Resolve the pending confirmation first"
+                if pending_approval
+                else "Create and approve a plan before testing a conflict"
+            )
+        elif card.kind == "advance":
+            available = conflict_played and not pending_approval and has_planned
+            if not conflict_played:
+                reason = "Create the calendar conflict first"
+            elif pending_approval:
+                reason = "Resolve the pending confirmation first"
+            else:
+                reason = "There is no reserved block to elapse yet"
+        else:
+            available = advance_played and not pending_approval and has_awaiting
+            if awaiting_duration is not None:
+                label = (
+                    f"Log {min(60, awaiting_duration)} verified minutes "
+                    "on the elapsed block"
+                )
+            if not advance_played:
+                reason = "Fast-forward past a block first"
+            elif pending_approval:
+                reason = "Resolve the pending confirmation first"
+            else:
+                reason = "No block is awaiting a check-in"
+        entries.append(
             {
                 "card_id": card.card_id,
-                "persona": card.persona,
-                "sender": "Jordan Ellis" if card.persona == "jordan" else "You",
-                "body": card.body,
-                "note": card.note,
+                "kind": card.kind,
+                "persona": None,
+                "label": label,
+                "body": None,
+                "available": available,
+                "blocked_reason": None if available else reason,
             }
         )
-    return messages
+    return entries
+
+
+def _thread_view(session: SandboxSession) -> list[dict[str, Any]]:
+    return [
+        {
+            "card_id": message.message_id,
+            "persona": message.persona,
+            "sender": message.sender,
+            "subject": message.subject,
+            "body": message.body,
+            "note": _current_thread_note(session, message.message_id, message.note),
+            "custom": message.custom,
+            "retryAvailable": message.message_id in session.retryable_message_ids,
+            "retryAttemptsRemaining": (
+                max(1 - session.interpretation_retry_counts.get(message.message_id, 0), 0)
+                if message.custom
+                else 0
+            ),
+        }
+        for message in session.thread_messages
+    ]
+
+
+def _current_thread_note(
+    session: SandboxSession,
+    rendered_message_id: str,
+    original_note: str,
+) -> str:
+    source_message_id = MESSAGE_IDS.get(rendered_message_id, rendered_message_id)
+    for approval in session.world.store.get("approvals", {}).values():
+        request_type = approval.get("request_type")
+        if request_type not in {
+            "deadline_change_confirmation",
+            "retraction_confirmation",
+        }:
+            continue
+        source_reference = (approval.get("payload") or {}).get(
+            "source_reference"
+        ) or {}
+        if source_reference.get("message_id") != source_message_id:
+            continue
+        decision = (approval.get("decision") or {}).get("decision")
+        if request_type == "deadline_change_confirmation":
+            if decision == "approve":
+                return "The proposal was held for confirmation and later accepted by you."
+            if decision == "reject":
+                return (
+                    "The proposal was held for confirmation and later rejected by you; "
+                    "the binding deadline did not change."
+                )
+        if request_type == "retraction_confirmation":
+            if decision == "approve":
+                return (
+                    "The retraction was held for confirmation and later accepted by you; "
+                    "the existing commitment was canceled."
+                )
+            if decision == "reject":
+                return (
+                    "The retraction was held for confirmation and later rejected by you; "
+                    "the existing commitment stayed open."
+                )
+    return original_note
 
 
 def _commitments_view(world: SandboxWorld) -> list[dict[str, Any]]:
@@ -338,6 +704,22 @@ def _commitments_view(world: SandboxWorld) -> list[dict[str, Any]]:
         projection = document.get("projection") or {}
         effort = document.get("effort") or {}
         deadline = document.get("deadline") or {}
+        terminal = document["lifecycle_status"] in {
+            "completed",
+            "dismissed",
+            "canceled",
+        }
+        verified_minutes = sum(
+            int(block.get("verified_minutes") or 0)
+            for _, block in _blocks(world)
+            if block.get("commitment_id") == commitment_id
+        )
+        remaining_minutes = projection.get("remaining_minutes")
+        if remaining_minutes is None and effort.get("confirmed_minutes") is not None:
+            remaining_minutes = max(
+                int(effort["confirmed_minutes"]) - verified_minutes,
+                0,
+            )
         rows.append(
             {
                 "commitmentId": commitment_id,
@@ -350,26 +732,63 @@ def _commitments_view(world: SandboxWorld) -> list[dict[str, Any]]:
                 "deadlineConfidence": deadline.get("confidence"),
                 "proposedMinutes": effort.get("proposed_minutes"),
                 "confirmedMinutes": effort.get("confirmed_minutes"),
-                "verifiedMinutes": projection.get("verified_completed_minutes"),
-                "remainingMinutes": projection.get("remaining_minutes"),
-                "riskLevel": projection.get("risk_level"),
-                "evidence": _evidence_view(world, commitment_id),
+                "verifiedMinutes": verified_minutes,
+                "remainingMinutes": (
+                    None if terminal else remaining_minutes
+                ),
+                "riskLevel": None if terminal else projection.get("risk_level"),
+                "evidence": _evidence_view(
+                    world,
+                    commitment_id,
+                    str(deadline.get("evidence_id") or ""),
+                ),
             }
         )
     return rows
 
 
-def _evidence_view(world: SandboxWorld, commitment_id: str) -> list[dict[str, Any]]:
+def _evidence_view(
+    world: SandboxWorld,
+    commitment_id: str,
+    deadline_evidence_id: str,
+) -> list[dict[str, Any]]:
     rows = []
-    for document in world.store.get("evidence", {}).values():
+    seen: set[tuple[str, str]] = set()
+    evidence_documents = sorted(
+        world.store.get("evidence", {}).items(),
+        key=lambda item: (
+            item[0] == deadline_evidence_id,
+            _iso(item[1].get("created_at") or item[1].get("recorded_at")) or "",
+        ),
+        reverse=True,
+    )
+    for evidence_id, document in evidence_documents:
         if document.get("commitment_id") != commitment_id:
             continue
+        excerpt = document.get("excerpt") or document.get("note") or ""
+        normalized_excerpt = " ".join(str(excerpt).split()).casefold()
+        if not normalized_excerpt:
+            continue
+        source_reference = document.get("source_reference") or {}
+        source_key = str(source_reference.get("message_id") or evidence_id)
+        dedupe_key = (source_key, normalized_excerpt)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         rows.append(
             {
-                "excerpt": document.get("excerpt", ""),
+                "excerpt": excerpt,
                 "kind": document.get("evidence_type") or document.get("kind"),
+                "supportsDeadline": evidence_id == deadline_evidence_id,
+                "createdAt": _iso(
+                    document.get("created_at") or document.get("recorded_at")
+                ),
             }
         )
+    rows.sort(
+        key=lambda row: (bool(row["supportsDeadline"]), row["createdAt"] or ""),
+        reverse=True,
+    )
     return rows[:4]
 
 
@@ -415,18 +834,54 @@ def _calendar_view(world: SandboxWorld) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: row["start"])
 
 
-def _approval_view(row: dict[str, Any]) -> dict[str, Any]:
+def _approval_view(world: SandboxWorld, row: dict[str, Any]) -> dict[str, Any]:
     payload = row.get("payload") or {}
     proposal = payload.get("proposal") or {}
+    proposed_minutes = payload.get("proposed_minutes")
+    if proposed_minutes is None:
+        proposed_minutes = proposal.get("proposed_effort_minutes")
+    if proposed_minutes is None:
+        proposed_minutes = payload.get("proposed_effort_minutes")
+    proposed_ownership = proposal.get("ownership_type") or payload.get(
+        "ownership_type"
+    )
+    requires_ownership = (
+        row["request_type"] == "identity_confirmation"
+        and proposed_ownership == "ambiguous"
+    )
+    commitment = world.store.get("commitments", {}).get(
+        str(row.get("commitment_id") or ""),
+        {},
+    )
     return {
         "approvalId": row["approval_id"],
         "requestType": row["request_type"],
         "commitmentId": row.get("commitment_id"),
+        "commitmentTitle": commitment.get("title")
+        or proposal.get("normalized_outcome")
+        or payload.get("normalized_outcome"),
         "revision": row["revision"],
-        "reason": payload.get("policy_reason") or payload.get("reason"),
-        "proposedMinutes": proposal.get("proposed_effort_minutes")
-        or payload.get("proposed_effort_minutes"),
+        "reason": row.get("policy_reason")
+        or payload.get("policy_reason")
+        or payload.get("reason"),
+        "previousRejectionReason": payload.get("previous_rejection_reason"),
+        "proposedMinutes": proposed_minutes,
         "options": list(payload.get("options") or ()),
+        "requiresOwnership": requires_ownership,
+        "ownershipOptions": (
+            ["my_commitment", "request_to_me", "commitment_to_me"]
+            if requires_ownership
+            else []
+        ),
+        "proposedOwnership": proposed_ownership,
+        "proposedOperation": proposal.get("proposed_identity_operation")
+        or payload.get("proposed_operation"),
+        "normalizedOutcome": proposal.get("normalized_outcome")
+        or payload.get("normalized_outcome"),
+        "proposedDeadline": (proposal.get("deadline") or {}).get("proposed_value"),
+        "proposedDeadlineExpression": (proposal.get("deadline") or {}).get(
+            "source_expression"
+        ),
     }
 
 
@@ -460,15 +915,56 @@ def _blocks(world: SandboxWorld) -> list[tuple[str, dict[str, Any]]]:
     )
 
 
-def _next_planned_block(world: SandboxWorld) -> tuple[str, dict[str, Any]] | None:
+def _next_planned_block(
+    world: SandboxWorld, *, future_only: bool = False
+) -> tuple[str, dict[str, Any]] | None:
     for block_id, document in _blocks(world):
-        if document["execution_state"] == "planned":
-            return block_id, document
+        if document["execution_state"] != "planned":
+            continue
+        if document["scheduled_end"] <= world.clock.now():
+            continue
+        if future_only and document["scheduled_start"] < world.clock.now():
+            continue
+        return block_id, document
     return None
 
 
-def _commitment_count(world: SandboxWorld) -> int:
-    return len(world.store.get("commitments", {}))
+def _commitment_snapshot(world: SandboxWorld) -> dict[str, tuple[Any, ...]]:
+    """Fields that make a message a user-visible semantic revision.
+
+    Internal reconciliation metadata can advance a document revision even when
+    identity resolution pauses. It must not make the sandbox claim that the
+    message's ownership, outcome, or deadline was applied.
+    """
+    return {
+        commitment_id: (
+            document.get("title"),
+            (document.get("deadline") or {}).get("value"),
+            document.get("ownership_type"),
+            document.get("lifecycle_status"),
+        )
+        for commitment_id, document in world.store.get("commitments", {}).items()
+    }
+
+
+def _has_pending_approvals(
+    world: SandboxWorld, request_type: str | None = None
+) -> bool:
+    return any(
+        document.get("user_id") == SANDBOX_USER
+        and document.get("status") == "pending"
+        and (request_type is None or document.get("request_type") == request_type)
+        for document in world.store.get("approvals", {}).values()
+    )
+
+
+def _pending_approval_snapshot(world: SandboxWorld) -> dict[str, str]:
+    return {
+        approval_id: str(document.get("request_type", ""))
+        for approval_id, document in world.store.get("approvals", {}).items()
+        if document.get("user_id") == SANDBOX_USER
+        and document.get("status") == "pending"
+    }
 
 
 async def _pending_approvals(world: SandboxWorld) -> list[dict[str, Any]]:

@@ -21,11 +21,14 @@ from commitmentos.domain.actions.models import (
     MutationResponseEvidence,
 )
 from commitmentos.domain.commitments.models import (
+    BlockingStatus,
     Commitment,
+    CommitmentProjection,
     Deadline,
     Effort,
     LifecycleStatus,
     OwnershipType,
+    RiskLevel,
 )
 from commitmentos.domain.controls.models import ControlMode, initial_system_controls
 from commitmentos.domain.planning.models import TimeInterval
@@ -164,12 +167,26 @@ class TestCalendarEventIdentity:
 
 class TestCommitmentLifecycle:
     def test_completion_requires_explicit_evidence(self) -> None:
-        commitment = make_commitment(lifecycle_status=LifecycleStatus.ACTIVE)
+        commitment = make_commitment(
+            lifecycle_status=LifecycleStatus.ACTIVE,
+            projection=CommitmentProjection(
+                verified_completed_minutes=60,
+                remaining_minutes=120,
+                risk_level=RiskLevel.ON_TRACK,
+                blocking_status=BlockingStatus.CLEAR,
+                source_commitment_revision=1,
+                source_work_block_revision_hash="blocks-v1",
+                planner_run_id="plan-v1",
+                calculator_version="projection-v1",
+                computed_at=NOW,
+            ),
+        )
         with pytest.raises(InvalidTransitionError):
             commitment.transition(LifecycleStatus.COMPLETED, NOW)
         completed = commitment.complete("evidence-1", NOW)
         assert completed.lifecycle_status == LifecycleStatus.COMPLETED
         assert completed.completion_evidence_id == "evidence-1"
+        assert completed.projection is None
         assert completed.revision == commitment.revision + 1
 
     def test_completed_is_terminal_for_reconciliation(self) -> None:

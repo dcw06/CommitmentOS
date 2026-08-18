@@ -15,6 +15,7 @@ class IdentityOperation(StrEnum):
     CREATE = "create"
     UPDATE_EXISTING = "update_existing"
     SUPERSEDE = "supersede"
+    CANCEL_EXISTING = "cancel_existing"
     IGNORE = "ignore"
     AMBIGUOUS = "ambiguous"
 
@@ -130,7 +131,9 @@ class CommitmentIdentityResolver:
                 IdentityOperation.CREATE, None, candidate_ids, "no_matching_candidate"
             )
 
-        # update_existing / supersede require a verifiable in-thread target.
+        # Updates and terminal identity operations require a verifiable
+        # in-thread target. The model may propose the operation, but it never
+        # gets to name a record outside this bounded candidate set.
         target = next(
             (
                 c

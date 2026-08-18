@@ -150,6 +150,55 @@ def activity_types(app: Phase1App) -> list[str]:
 
 
 class TestCommitmentCreation:
+    async def test_missing_deadline_requests_a_deadline_and_then_creates(
+        self, app: Phase1App
+    ) -> None:
+        quote = "Yes, I will send the revised proposal."
+        message = app.gmail.add_message(
+            "msg_missing_deadline_001",
+            "thread_missing_deadline_001",
+            app.clock.now(),
+            subject="Proposal",
+            body_text=quote,
+            label_ids=("SENT",),
+        )
+        app.interpreter.script(
+            interpretation_of(
+                proposal_wire(
+                    message.message_id,
+                    quote,
+                    deadline_expression=None,
+                    deadline_value=None,
+                )
+            )
+        )
+
+        await observe_message(app, message)
+        await app.run_reconciliation_tasks()
+        assert commitments_in(app) == {}
+        approval_id, approval = next(
+            (approval_id, row)
+            for approval_id, row in app.store["approvals"].items()
+            if row.get("status") == "pending"
+        )
+        assert approval["request_type"] == "deadline_required_confirmation"
+
+        result = await app.resolve_approval.execute(
+            app.actor(),
+            approval_id,
+            {"decision": "approve", "deadline": FRIDAY_16.isoformat()},
+            approval["revision"],
+            "trace-missing-deadline",
+        )
+        assert result.status.value == "completed"
+        await app.run_reconciliation_tasks()
+
+        commitment = next(iter(commitments_in(app).values()))
+        assert commitment["deadline"]["value"] == FRIDAY_16
+        assert [row["request_type"] for row in pending_approvals(app)] == [
+            "effort_confirmation"
+        ]
+
     async def test_golden_acceptance_creates_commitment_and_effort_approval(
         self, app: Phase1App
     ) -> None:
@@ -348,7 +397,75 @@ class TestIdentityAcrossMessages:
         # The candidate set reached the model on the second call.
         assert app.interpreter.calls[1]["candidates"][0]["commitment_id"] == commitment_id
 
-    async def test_deadline_revision_updates_existing_commitment(self, app: Phase1App) -> None:
+    async def test_explicit_retraction_cancels_existing_without_creating_another(
+        self, app: Phase1App
+    ) -> None:
+        thread_id = "thread-counterparty-retraction"
+        promise_body = "I'll send you the quarterly report by Friday."
+        promise = app.gmail.add_message(
+            "message-counterparty-promise",
+            thread_id,
+            app.clock.now(),
+            subject="Quarterly report",
+            body_text=promise_body,
+            label_ids=("INBOX",),
+        )
+        app.interpreter.script(
+            interpretation_of(
+                proposal_wire(
+                    promise.message_id,
+                    promise_body,
+                    ownership="commitment_to_me",
+                    outcome="Send the quarterly report",
+                    beneficiary=None,
+                )
+            )
+        )
+        await observe_message(app, promise)
+        await app.run_reconciliation_tasks()
+        commitment_id = next(iter(commitments_in(app)))
+
+        retraction_body = (
+            "Actually, I can't send it anymore, so please disregard my earlier promise."
+        )
+        retraction = app.gmail.add_message(
+            "message-counterparty-retraction",
+            thread_id,
+            app.clock.now() + timedelta(minutes=5),
+            subject="Quarterly report",
+            body_text=retraction_body,
+            label_ids=("INBOX",),
+        )
+        # Reproduce the unsafe model shape seen in the browser: it proposes a
+        # second positive create and carries forward Friday. Deterministic
+        # identity policy must still recognize the exact retraction evidence.
+        app.interpreter.script(
+            interpretation_of(
+                proposal_wire(
+                    retraction.message_id,
+                    retraction_body,
+                    ownership="commitment_to_me",
+                    outcome="Send the quarterly report",
+                    operation="create",
+                    beneficiary=None,
+                )
+            )
+        )
+        await observe_message(app, retraction)
+        await app.run_reconciliation_tasks()
+
+        commitments = commitments_in(app)
+        assert list(commitments) == [commitment_id]
+        assert commitments[commitment_id]["lifecycle_status"] == "canceled"
+        assert pending_approvals(app) == []
+        assert any(
+            event["payload"].get("operation") == "cancel_existing"
+            for event in app.store["activity_events"].values()
+        )
+
+    async def test_counterparty_deadline_revision_waits_for_acceptance_then_updates_existing(
+        self, app: Phase1App
+    ) -> None:
         commitment_id = await self._create_golden_commitment(app)
         materialize_golden_thread(app, until_index=3)  # adds M3
         app.interpreter.script(
@@ -370,8 +487,40 @@ class TestIdentityAcrossMessages:
         commitments = commitments_in(app)
         assert len(commitments) == 1
         commitment = commitments[commitment_id]
+        assert commitment["revision"] == 1
+        assert commitment["deadline"]["value"] == FRIDAY_16
+        identity_id, identity = next(
+            (approval_id, approval)
+            for approval_id, approval in app.store["approvals"].items()
+            if approval.get("status") == "pending"
+            and approval["request_type"] == "deadline_change_confirmation"
+        )
+        assert identity["policy_reason"] == (
+            "counterparty_deadline_change_requires_confirmation"
+        )
+
+        result = await app.resolve_approval.execute(
+            app.actor(),
+            identity_id,
+            {"decision": "approve"},
+            identity["revision"],
+            "trace-deadline-accept",
+        )
+        assert result.status.value == "completed"
+        await app.run_reconciliation_tasks()
+
+        commitment = commitments_in(app)[commitment_id]
         assert commitment["revision"] == 2
         assert commitment["deadline"]["value"] == THURSDAY_16
+        deadline_audit = [
+            event
+            for event in app.store["activity_events"].values()
+            if event["event_type"] == "deadline_change_confirmation"
+        ]
+        assert deadline_audit
+        assert deadline_audit[-1]["summary"] == (
+            "deadline_change_confirmation approved"
+        )
         revisions = [
             doc
             for doc in app.store["activity_events"].values()
@@ -409,6 +558,23 @@ class TestIdentityAcrossMessages:
             )
         )
         await observe_message(app, app.gmail.messages[M3])
+        await app.run_reconciliation_tasks()
+
+        assert app.store["approvals"][stale_id]["status"] == "pending"
+        identity_id, identity = next(
+            (approval_id, approval)
+            for approval_id, approval in app.store["approvals"].items()
+            if approval.get("status") == "pending"
+            and approval["request_type"] == "deadline_change_confirmation"
+        )
+        result = await app.resolve_approval.execute(
+            app.actor(),
+            identity_id,
+            {"decision": "approve"},
+            identity["revision"],
+            "trace-deadline-accept",
+        )
+        assert result.status.value == "completed"
         await app.run_reconciliation_tasks()
 
         superseded = app.store["approvals"][stale_id]

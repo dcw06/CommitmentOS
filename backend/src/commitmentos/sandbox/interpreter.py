@@ -1,17 +1,20 @@
-"""Interpretation for the sandbox: live Gemini, cached, with a recorded floor.
+"""Interpretation for the sandbox: live Gemini, bounded cache, recorded card floor.
 
 A judge-facing surface must not be an unbounded model-spend endpoint, and it
 must not go dark when a model call fails. Both are handled here rather than
 by weakening the workflow:
 
-* **Cached per canned message.** The card set is fixed, so the first session
-  to send a card pays one live call and every later session reuses that
-  result for the process's lifetime. Live output is still genuine model
-  output on that exact input.
+* **Guided-card cache only.** The fixed authored contexts can share a bounded
+  process cache. Judge-authored text and its structured result stay inside its
+  session and are never inserted into that shared cache.
 * **Recorded floor.** If no live interpreter is configured, or the call
-  fails or is rejected by the strict wire schema, the card's recorded
+  fails or is rejected by the strict wire schema, a guided card's recorded
   interpretation is used and the response says so, so a judge is never shown
   model output that did not happen.
+
+Free-play text never uses the recorded floor. If live interpretation is not
+available, it is rejected visibly rather than being misrepresented as a
+canned card result.
 
 The deterministic validator downstream is unchanged and applies to both
 paths: evidence quotes must be exact substrings of the source message.
@@ -19,9 +22,16 @@ paths: evidence quotes must be exact substrings of the source message.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
-from dataclasses import replace
-from typing import Mapping, Sequence
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, replace
+from datetime import date, datetime
+from typing import Awaitable, Callable, Mapping, Sequence, TypeVar
 
 from commitmentos.application.ports.model_interpreter import (
     InterpretationResult,
@@ -35,11 +45,158 @@ from commitmentos.contracts.model_output import (
     wire_to_contract,
 )
 from commitmentos.domain.commitments.identity import IdentityOperation
-from commitmentos.sandbox.scenario import MESSAGES
+from commitmentos.domain.commitments.models import OwnershipType
+from commitmentos.sandbox.scenario import MESSAGES, PACIFIC, MessageCard
 
 logger = logging.getLogger(__name__)
 
 RECORDED_MODEL_ID = "recorded-interpretation"
+MAX_CACHE_ENTRIES = 256
+MAX_CACHE_LOCKS = 512
+MAX_MODEL_CALLS_PER_WINDOW = 12
+MODEL_CALL_WINDOW_SECONDS = 60.0
+MAX_CONCURRENT_MODEL_CALLS = 2
+MAX_MODEL_CALLS_PER_SESSION = 12
+
+T = TypeVar("T")
+
+
+class SandboxModelBudgetError(RuntimeError):
+    """A public model-call budget is exhausted."""
+
+
+class SandboxModelCallGate:
+    """One process-wide rolling and concurrency gate for every model method."""
+
+    def __init__(
+        self,
+        *,
+        max_calls_per_window: int = MAX_MODEL_CALLS_PER_WINDOW,
+        window_seconds: float = MODEL_CALL_WINDOW_SECONDS,
+        max_concurrent_calls: int = MAX_CONCURRENT_MODEL_CALLS,
+    ) -> None:
+        self._max_calls_per_window = max_calls_per_window
+        self._window_seconds = window_seconds
+        self._call_times: OrderedDict[int, float] = OrderedDict()
+        self._sequence = 0
+        self._guard = threading.Lock()
+        self._concurrency = asyncio.Semaphore(max_concurrent_calls)
+
+    async def invoke(self, call: Callable[[], Awaitable[T]]) -> T:
+        now = time.monotonic()
+        with self._guard:
+            cutoff = now - self._window_seconds
+            while self._call_times:
+                first_key, first_time = next(iter(self._call_times.items()))
+                if first_time >= cutoff:
+                    break
+                self._call_times.pop(first_key)
+            if len(self._call_times) >= self._max_calls_per_window:
+                raise SandboxModelBudgetError("sandbox model rate limit reached")
+            self._sequence += 1
+            self._call_times[self._sequence] = now
+        async with self._concurrency:
+            return await call()
+
+
+class BoundedSandboxModelInterpreter(ModelInterpreter):
+    """Per-session model allowance layered over the process-wide gate."""
+
+    def __init__(
+        self,
+        inner: ModelInterpreter,
+        gate: SandboxModelCallGate,
+        *,
+        max_calls: int = MAX_MODEL_CALLS_PER_SESSION,
+    ) -> None:
+        self._inner = inner
+        self._gate = gate
+        self._max_calls = max_calls
+        self._calls = 0
+
+    async def _invoke(self, call: Callable[[], Awaitable[T]]) -> T:
+        if self._calls >= self._max_calls:
+            raise SandboxModelBudgetError("sandbox session model budget spent")
+        self._calls += 1
+        return await self._gate.invoke(call)
+
+    async def interpret_commitment(
+        self,
+        source_text: str,
+        source_metadata: Mapping[str, str],
+        candidate_commitments: Sequence[Mapping[str, str]],
+    ) -> InterpretationResult:
+        return await self._invoke(
+            lambda: self._inner.interpret_commitment(
+                source_text, source_metadata, candidate_commitments
+            )
+        )
+
+    async def explain_decision(
+        self,
+        decision: Mapping[str, object],
+        evidence: Sequence[Mapping[str, str]],
+    ) -> tuple[str, ModelInvocationMetadata]:
+        return await self._invoke(lambda: self._inner.explain_decision(decision, evidence))
+
+
+@dataclass(frozen=True, slots=True)
+class _CacheEntry:
+    result: InterpretationResult
+    origin: str
+
+
+class SandboxInterpretationCache:
+    """Process-local result cache shared by isolated per-session interpreters.
+
+    The values are safe to share because the key includes the complete candidate
+    context, not only its length. Per-key async locks also ensure two judges do
+    not pay for the same first live invocation concurrently.
+    """
+
+    def __init__(self, max_entries: int = MAX_CACHE_ENTRIES) -> None:
+        self._entries: OrderedDict[str, _CacheEntry] = OrderedDict()
+        self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
+        self._max_entries = max_entries
+        self._guard = threading.Lock()
+
+    def get(self, key: str) -> _CacheEntry | None:
+        with self._guard:
+            entry = self._entries.get(key)
+            if entry is not None:
+                self._entries.move_to_end(key)
+            return entry
+
+    def put(self, key: str, entry: _CacheEntry) -> None:
+        with self._guard:
+            self._entries[key] = entry
+            self._entries.move_to_end(key)
+            while len(self._entries) > self._max_entries:
+                self._entries.popitem(last=False)
+
+    def lock_for(self, key: str) -> asyncio.Lock:
+        with self._guard:
+            lock = self._locks.get(key)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[key] = lock
+            self._locks.move_to_end(key)
+            # Keep active/waited-on locks. Old unlocked keys are safe to drop;
+            # the corresponding result has already been cached or the call is
+            # no longer in flight.
+            while len(self._locks) > MAX_CACHE_LOCKS:
+                old_key, old_lock = next(iter(self._locks.items()))
+                if old_lock.locked():
+                    self._locks.move_to_end(old_key)
+                    if all(candidate.locked() for candidate in self._locks.values()):
+                        break
+                    continue
+                self._locks.pop(old_key)
+            return lock
+
+    def size(self) -> int:
+        with self._guard:
+            return len(self._entries)
 
 
 def _bind_candidate_target(
@@ -81,13 +238,135 @@ def _recorded(card_body: str) -> CommitmentInterpretationV1 | None:
     return None
 
 
+def _newest_card(source_text: str) -> MessageCard | None:
+    newest: MessageCard | None = None
+    position = -1
+    for card in MESSAGES:
+        index = source_text.find(card.body[:60])
+        if index > position:
+            newest = card
+            position = index
+    return newest
+
+
+def _cache_key(
+    source_text: str,
+    source_metadata: Mapping[str, str],
+    candidate_commitments: Sequence[Mapping[str, str]],
+) -> str:
+    context = json.dumps(
+        {
+            "source": source_text,
+            "metadata": dict(source_metadata),
+            "candidates": [dict(candidate) for candidate in candidate_commitments],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(context.encode("utf-8")).hexdigest()
+
+
+def _deadline_day(value: str | None) -> date | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value).astimezone(PACIFIC).date()
+    except ValueError:
+        return None
+
+
+def _semantic_errors(
+    card: MessageCard,
+    interpretation: CommitmentInterpretationV1,
+    candidate_commitments: Sequence[Mapping[str, str]],
+) -> tuple[str, ...]:
+    """Validate the semantic promise made by this fixed judge card.
+
+    The production validator still checks evidence and authority. This extra
+    sandbox-only boundary prevents a schema-valid model variation from turning
+    the authored one-commitment story into a different (but safely escalated)
+    product branch while the explanatory copy claims the authored branch ran.
+    """
+
+    if len(interpretation.proposals) != 1:
+        return ("proposal_count",)
+    proposal = interpretation.proposals[0]
+    expected = _recorded(card.body)
+    if expected is None or len(expected.proposals) != 1:
+        return ("recorded_contract_missing",)
+    expected_proposal = expected.proposals[0]
+    errors: list[str] = []
+    outcome = proposal.normalized_outcome.casefold()
+    if not all(token in outcome for token in ("vendor", "comparison", "deck")):
+        errors.append("outcome")
+    if proposal.ownership_type is not expected_proposal.ownership_type:
+        errors.append("ownership")
+    if _deadline_day(proposal.deadline.proposed_value if proposal.deadline else None) != (
+        _deadline_day(
+            expected_proposal.deadline.proposed_value
+            if expected_proposal.deadline
+            else None
+        )
+    ):
+        errors.append("deadline_day")
+
+    candidate_ids = {
+        str(candidate.get("commitment_id", ""))
+        for candidate in candidate_commitments
+        if candidate.get("commitment_id")
+    }
+    if card.card_id == "msg_request":
+        if proposal.proposed_identity_operation is not IdentityOperation.CREATE:
+            errors.append("request_identity")
+    elif card.card_id == "msg_accept":
+        if proposal.proposed_identity_operation not in {
+            IdentityOperation.CREATE,
+            IdentityOperation.UPDATE_EXISTING,
+        }:
+            errors.append("acceptance_identity")
+        if (
+            proposal.proposed_identity_operation is IdentityOperation.UPDATE_EXISTING
+            and proposal.target_commitment_id not in candidate_ids
+        ):
+            errors.append("acceptance_target")
+    elif card.card_id == "msg_deadline_change":
+        if proposal.ownership_type is not OwnershipType.MY_COMMITMENT:
+            errors.append("deadline_ownership")
+        if proposal.proposed_identity_operation is not IdentityOperation.UPDATE_EXISTING:
+            errors.append("deadline_identity")
+        if proposal.target_commitment_id not in candidate_ids:
+            errors.append("deadline_target")
+    return tuple(errors)
+
+
 class SandboxInterpreter(ModelInterpreter):
     """Prefers the live model, caches per card, falls back to the record."""
 
-    def __init__(self, live: ModelInterpreter | None) -> None:
+    def __init__(
+        self,
+        live: ModelInterpreter | None,
+        cache: SandboxInterpretationCache | None = None,
+    ) -> None:
         self._live = live
-        self._cache: dict[str, InterpretationResult] = {}
-        self.last_source: str = "recorded"
+        self._cache = cache or SandboxInterpretationCache()
+        self.last_source: str = "not-run"
+        self._expected_card_id: str | None = None
+        self._custom_message = False
+
+    def begin_guided_message(self, card_id: str) -> None:
+        """Pin the card being delivered; source text cannot spoof this choice."""
+        self._expected_card_id = card_id
+        self._custom_message = False
+
+    def begin_custom_message(self) -> None:
+        """Mark one delivery as free-play, where canned fallback is forbidden."""
+        self._expected_card_id = None
+        self._custom_message = True
+
+    def end_message(self) -> None:
+        self._expected_card_id = None
+        self._custom_message = False
 
     async def interpret_commitment(
         self,
@@ -95,63 +374,114 @@ class SandboxInterpreter(ModelInterpreter):
         source_metadata: Mapping[str, str],
         candidate_commitments: Sequence[Mapping[str, str]],
     ) -> InterpretationResult:
-        key = f"{source_text}|{len(candidate_commitments)}"
+        # Custom source text and structured output are session-private. Check
+        # this before even looking at the shared guided-card cache so copying a
+        # card body can never select a cached authored answer.
+        if self._custom_message:
+            return await self._interpret_custom(
+                source_text, source_metadata, candidate_commitments
+            )
+
+        key = _cache_key(source_text, source_metadata, candidate_commitments)
         cached = self._cache.get(key)
         if cached is not None:
-            self.last_source = "live-cached"
-            return cached
-        if self._live is not None:
-            try:
-                result = await self._live.interpret_commitment(
-                    source_text, source_metadata, candidate_commitments
-                )
-            except (ModelOutputParseError, Exception) as error:  # noqa: BLE001
-                # A public demonstration degrades to the record rather than
-                # failing; the response labels which path produced it.
-                logger.warning(
-                    "sandbox live interpretation unavailable, using record",
-                    extra={"error_type": type(error).__name__},
-                )
-            else:
-                self._cache[key] = result
-                self.last_source = "live"
-                return result
+            self.last_source = f"{cached.origin}-cached"
+            return cached.result
 
-        interpretation = self._newest_recorded(source_text)
-        if interpretation is None:
-            raise ModelOutputParseError(("sandbox_no_recorded_interpretation",))
-        interpretation = _bind_candidate_target(interpretation, candidate_commitments)
-        self.last_source = "recorded"
-        return InterpretationResult(
-            interpretation=interpretation,
-            metadata=ModelInvocationMetadata(
-                model_id=RECORDED_MODEL_ID,
-                prompt_version="commitment_interpretation_v2",
-                schema_version="extraction_v2",
-                thinking_level="low",
-                latency_ms=0,
-                input_tokens=0,
-                output_tokens=0,
-            ),
-        )
+        async with self._cache.lock_for(key):
+            cached = self._cache.get(key)
+            if cached is not None:
+                self.last_source = f"{cached.origin}-cached"
+                return cached.result
 
-    @staticmethod
-    def _newest_recorded(source_text: str) -> CommitmentInterpretationV1 | None:
-        """The thread is rendered whole each time; interpret its last message.
+            fallback_origin = "recorded"
+            card = next(
+                (
+                    candidate
+                    for candidate in MESSAGES
+                    if candidate.card_id == self._expected_card_id
+                ),
+                None,
+            ) or _newest_card(source_text)
+            if self._live is not None:
+                fallback_origin = "recorded-fallback"
+                try:
+                    result = await self._live.interpret_commitment(
+                        source_text, source_metadata, candidate_commitments
+                    )
+                except Exception as error:  # noqa: BLE001
+                    # A public demonstration degrades to the record rather than
+                    # failing; the response labels which path produced it.
+                    logger.warning(
+                        "sandbox live interpretation unavailable, using record",
+                        extra={"error_type": type(error).__name__},
+                    )
+                else:
+                    bound = _bind_candidate_target(
+                        result.interpretation, candidate_commitments
+                    )
+                    result = replace(result, interpretation=bound)
+                    semantic_errors = (
+                        _semantic_errors(card, bound, candidate_commitments)
+                        if card is not None
+                        else ("unknown_card",)
+                    )
+                    if not semantic_errors:
+                        self._cache.put(key, _CacheEntry(result, "live"))
+                        self.last_source = "live"
+                        return result
+                    logger.warning(
+                        "sandbox live interpretation violated card contract, using record",
+                        extra={"semantic_error_codes": semantic_errors},
+                    )
 
-        The workflow hands the model the entire thread, so the card being
-        sent is the last one whose body appears in the rendered source.
-        """
-        newest: CommitmentInterpretationV1 | None = None
-        position = -1
-        for card in MESSAGES:
-            index = source_text.find(card.body[:60])
-            if index > position:
-                candidate = _recorded(card.body)
-                if candidate is not None:
-                    newest = candidate
-                    position = index
-        return newest
+            interpretation = _recorded(card.body) if card is not None else None
+            if interpretation is None:
+                raise ModelOutputParseError(("sandbox_no_recorded_interpretation",))
+            interpretation = _bind_candidate_target(
+                interpretation, candidate_commitments
+            )
+            result = InterpretationResult(
+                interpretation=interpretation,
+                metadata=ModelInvocationMetadata(
+                    model_id=RECORDED_MODEL_ID,
+                    prompt_version="commitment_interpretation_v2",
+                    schema_version="extraction_v2",
+                    thinking_level="low",
+                    latency_ms=0,
+                    input_tokens=0,
+                    output_tokens=0,
+                ),
+            )
+            self._cache.put(key, _CacheEntry(result, fallback_origin))
+            self.last_source = fallback_origin
+            return result
+
+    async def _interpret_custom(
+        self,
+        source_text: str,
+        source_metadata: Mapping[str, str],
+        candidate_commitments: Sequence[Mapping[str, str]],
+    ) -> InterpretationResult:
+        """Run arbitrary text live, without ever borrowing a canned answer."""
+        if self._live is None:
+            self.last_source = "custom-unavailable"
+            raise ModelOutputParseError(("sandbox_custom_interpretation_unavailable",))
+        try:
+            result = await self._live.interpret_commitment(
+                source_text, source_metadata, candidate_commitments
+            )
+        except Exception as error:  # noqa: BLE001
+            logger.warning(
+                "sandbox custom interpretation unavailable",
+                extra={"error_type": type(error).__name__},
+            )
+            self.last_source = "custom-unavailable"
+            raise ModelOutputParseError(
+                ("sandbox_custom_interpretation_unavailable",)
+            ) from error
+        self.last_source = "live-custom"
+        return result
 
     async def explain_decision(
         self,

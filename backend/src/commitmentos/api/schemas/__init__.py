@@ -17,7 +17,13 @@ class RevisionedMutationRequest(StrictApiModel):
 class ApprovalResolutionRequest(RevisionedMutationRequest):
     decision: str
     reason: str | None = None
-    confirmed_minutes: int | None = Field(default=None, gt=0)
+    confirmed_minutes: int | None = Field(
+        default=None,
+        ge=30,
+        le=2400,
+        multiple_of=15,
+    )
+    deadline: datetime | None = None
     ownership_type: str | None = None
     choice: str | None = None
 

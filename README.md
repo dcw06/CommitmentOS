@@ -53,8 +53,10 @@ watch notifications only. Three **Cloud Tasks** queues carry source
 synchronization, reconciliation, and Calendar-action execution as named,
 idempotent tasks. **Cloud Scheduler** drives watch renewal, cursor catch-up,
 dispatch repair, and the once-a-minute safety reconciliation.
-**Secret Manager** holds the Gemini key, OAuth client, and the controlled
-account's refresh token.
+**Secret Manager** holds separate production and public-sandbox Gemini keys,
+the OAuth client, and the controlled account's refresh token. The sandbox key
+is issued from a sandbox-only Gemini quota project so unauthenticated traffic
+cannot consume the controlled-data extraction quota.
 
 Every reconciliation run is a **bounded ADK graph invocation** with two honest
 stages: execute the durable reconciliation controller once, then finalize a
@@ -72,7 +74,7 @@ and action results continue through new durable observations.
 | `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | Google-signed OIDC: exact audience + per-group service-account identity; Gmail change signals are durably rate-limited |
 | Calendar webhook | High-entropy channel token (constant-time hash compare) + channel/resource mapping + active overlap status + stored expiry + durable per-channel rate limit |
 | `/demo` | Read-only seeded judge mode; static data, no Firestore/credential path, every mutation method rejected |
-| `/sandbox` | Interactive judge sandbox; unauthenticated by design, but composed entirely of in-memory twins — no credential, Firestore client, or controlled-user document is reachable from it. Session addressed by explicit header (no ambient authority), inputs restricted to a fixed card deck, and concurrent worlds, idle lifetime, and per-session actions all capped |
+| `/sandbox` | Interactive judge sandbox; unauthenticated by design. Its state and every mutation port are in-memory twins; its sole external edge is a no-tools Gemini adapter with a distinct sandbox key/client/quota pool. No Firestore client, controlled-user credential/document, or production interpreter is reachable. Session addressed by explicit header (no ambient authority); mutually exclusive guided/free-play lanes; concurrent worlds, creation rate, idle/absolute lifetime, message length, per-session use, rolling traffic/model calls, concurrency, deadlines, and guided cache all capped |
 
 ### Stack
 
@@ -89,26 +91,50 @@ and action results continue through new durable observations.
 
 Two zero-login surfaces, neither of which touches live data.
 
-**`/sandbox` — drive it yourself.** A simulated email thread you play both
-sides of. Send the request, accept it, move the deadline, drop a meeting on
+**`/sandbox` — drive it yourself.** Choose one of two isolated lanes per reset:
+the authored end-to-end story, or a free-play email thread with a visible
+subject. In free play, choose Jordan/You and write your own message (including
+several consecutive messages from the same person); once the resulting
+commitment is planned, the same conflict, time-advance, and check-in controls
+remain available for that judge-authored work. In the guided lane, send the
+request, accept it, move the deadline, drop a meeting on
 top of a reserved block, let time pass, log your verified minutes — and watch
 the agent extract, converge, plan, repair, and refuse to inflate progress in
 response. Everything on the right-hand side is produced by the production
-stack: the same interpreter, identity resolver, portfolio planner, policy
-engine, executor, and audit timeline that serve the controlled user. What is
-simulated is the world around it — Firestore is a dict, Gmail is a scripted
+stack: the same interpreter implementation/prompt contract, identity resolver,
+portfolio planner, policy engine, executor, and audit timeline that serve the
+controlled user. The public model instance and key are deliberately separate.
+What is simulated is the world around it — Firestore is a dict, Gmail is a scripted
 mailbox, Calendar is an in-memory store with Google's etag and
 cancelled-event semantics, Cloud Tasks is a list, and the clock is
 advanceable. Each visitor gets a private world; sessions cannot see each
-other and expire when idle.
+other, state reads do not extend their life, and worlds expire after 45 idle
+minutes or two hours absolutely. Expiry has its own scheduled deletion, so
+private text is released even if no later request arrives to trigger cleanup.
 
-Interpretation is the one deliberately live edge. Because the deck is fixed,
-the first call for a given message is real Gemini output and is then cached
-for the process; if the model is unavailable the sandbox falls back to a
-recorded interpretation and labels which path produced it, so a judge is
-never shown model output that did not happen. The deterministic validator is
-unchanged on both paths — evidence quotes must be exact substrings of the
-source message.
+Interpretation is the one deliberately live edge. For a guided card, the first
+call for a complete thread/candidate context is real Gemini output and can be
+reused from the bounded process cache. If the model is unavailable, or a
+schema-valid variation violates that card's authored ownership, identity,
+outcome, or deadline contract, the guided story falls back to its recorded
+interpretation and labels the path. Judge-authored messages are different:
+they never enter the shared cache, they run live, and an outage/rejection is
+shown as `custom-unavailable`; a canned interpretation is never substituted.
+Custom source and structured results live only in that process-local world
+until reset/expiry. Custom input is limited to 1,000 characters, 8 messages per
+session, and a rolling 12 requests/minute per instance. Session creation, all
+model methods together, model concurrency, and per-session model use have
+independent bounds. The documented two-instance deployment ceiling plus the
+sandbox-only quota project bound aggregate spend. Sandbox calls have a
+20-second transport/application deadline and no SDK retry; only an HTTP-400
+unsupported-thinking response gets one compatibility retry without thinking.
+The extraction model has no tools, and the production deterministic
+validator is unchanged on both paths — evidence quotes must be exact
+substrings of the source message. This public edge is a separate interpreter
+and lazy client backed by `COMMITMENTOS_SANDBOX_GEMINI_API_KEY_SECRET_REF`;
+production refuses to boot if that reference is absent or equals the
+controlled-data Gemini reference. The referenced key must be issued by a
+sandbox-only quota project.
 
 **`/demo` — read the dashboard.** The full dashboard rendering seeded data
 derived from a fixed demonstration scenario. It is read-only by
@@ -123,8 +149,9 @@ backend/src/commitmentos/   the service: api/ application/ domain/
                             infrastructure/ workflows/ contracts/ bootstrap/
              .../sandbox/    the interactive judge sandbox: the in-memory twin
                             (twin.py), one isolated world composing the real
-                            stack over it (world.py), the fixed card deck and
-                            its recorded interpretations (scenario.py)
+                            stack over it (world.py), guided card deck and its
+                            recorded interpretations (scenario.py), bounded
+                            judge-authored messages (session.py/interpreter.py)
 backend/tests/              unit + integration + contract suites over an
                             in-memory Firestore twin (production repo code
                             runs unmodified against it)
@@ -153,7 +180,7 @@ uv sync
 cp .env.example .env        # then fill in your project's values
                             # (every variable maps 1:1 to bootstrap/settings.py)
 
-# 3. Tests — 254 tests over the in-memory Firestore twin; no cloud access
+# 3. Tests — 304 tests over the in-memory Firestore twin; no cloud access
 uv run pytest
 
 # 4. Frontend
@@ -192,17 +219,25 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
 
 # Firestore (Native), three Cloud Tasks queues, the Gmail watch topic (with
 # gmail-api-push@system.gserviceaccount.com granted Publisher), four service
-# accounts (runtime, pubsub, tasks, scheduler with run.invoker), and four
-# secrets (OAuth client, controlled refresh token, Gemini key, calendar
-# channel token) — resource names are referenced from .env.example.
+# accounts (runtime, pubsub, tasks, scheduler with run.invoker), and five
+# secrets (OAuth client, controlled refresh token, controlled-data Gemini key,
+# sandbox-only Gemini key, calendar channel token) — resource names are
+# referenced from .env.example. The sandbox key must come from a separate
+# Gemini quota project; only its Secret Manager resource belongs here.
 
 # Composite indexes
 # (create the definitions in infra/firestore/indexes.json)
 
-# Deploy — the Dockerfile builds the dashboard (Node stage) and the service
-gcloud run deploy commitmentos --source . --region us-west1 \
-  --allow-unauthenticated   # IAM-edge public for the Calendar webhook;
-                            # application-layer contracts guard every route
+# Set COMMITMENTOS_SANDBOX_GEMINI_API_KEY_SECRET_REF in the local .env, then
+# use the owner-only release gate. It builds the dashboard/service, deploys
+# with affinity and maxScale=2, explicitly routes 100% to latest, and fails if
+# Cloud Run or the served custom-message API/UI differs from that contract.
+# The deploy path also sends one sandbox-only model probe to prove the new
+# secret is accessible and its key works; it never touches controlled data.
+.venv/bin/python scripts/deploy_commitmentos.py --deploy
+
+# Read-only repeat of the post-deploy checks.
+.venv/bin/python scripts/deploy_commitmentos.py
 
 # Scheduler jobs (dispatch repair, watch renewal, cursor catch-up, safety)
 bash scripts/create_scheduler_jobs.sh
@@ -211,6 +246,12 @@ bash scripts/create_scheduler_jobs.sh
 python scripts/gmail_watch_spike.py register
 python scripts/calendar_watch_spike.py register --service-url <SERVICE_URL>
 ```
+
+Session affinity keeps a process-local sandbox world on the instance that
+created it; the browser still recovers cleanly after recycle or idle expiry.
+The two-instance ceiling bounds aggregate public free-play traffic. Cloud Run
+remains IAM-edge public for the Calendar webhook, while application-layer
+contracts guard every route. Deploys and traffic changes are owner-run.
 
 The app does not need to stay publicly live outside judging; it scales to
 zero. All measured evidence in `docs/` was produced against the deployed
@@ -276,13 +317,16 @@ documents from `backend/src/commitmentos/demo_data/` through a read-only model
 with no Firestore or Google credential adapter, so every request starts from
 the same data and mutations are impossible.
 
-`/sandbox` needs no seed or reset either: each session builds its own world in
-memory and drops it on idle expiry or instance recycle, so "reset" is just a
-new session. The sandbox's behavior is pinned by
-`backend/tests/integration/test_sandbox_flow.py` (the story must extract,
-converge onto one commitment, plan, repair a conflict, and verify honest
-minutes) and `backend/tests/contract/test_sandbox_contracts.py` (isolation,
-deck-bound input, caps, and route precedence).
+`/sandbox` needs no seed command either: each session builds its own world in
+memory and drops it on idle expiry or instance recycle. "Start over" calls the
+bounded reset endpoint, releasing the old world before opening its replacement.
+Cloud Run session affinity is required by the deployment command because these
+demonstration worlds are intentionally process-local. The sandbox's behavior is
+pinned by `backend/tests/integration/test_sandbox_flow.py` (the story must
+extract, converge onto one commitment, plan, repair a conflict, and verify
+honest minutes) and `backend/tests/contract/test_sandbox_contracts.py`
+(isolation, sender/text validation, free-play and card caps, serialization,
+automatic expiry, reset, and route precedence).
 
 For an end-to-end seed against the deployed service and real Calendar, use the
 audited live driver. Its generated run tag scopes cleanup:
@@ -392,11 +436,17 @@ replace or extend those records.
   properties, and patch/cancel always sends `If-Match`; a 412 can only mark
   intent stale and trigger resynchronization.
 - The interactive sandbox is unauthenticated, so its safety is structural
-  rather than procedural: it is composed only of in-memory twins and holds no
-  credential or live client, its session id travels in an explicit header
-  rather than a cookie (nothing the browser sends automatically carries
-  authority there), and it accepts only card ids from a fixed deck, so no
-  free text ever reaches the model.
+  rather than procedural: all state and mutation ports are in-memory twins,
+  and its session id travels in an explicit header rather than a cookie
+  (nothing the browser sends automatically carries authority there). Its one
+  external capability is a no-tools model adapter with a separate interpreter,
+  client, secret, and quota project; the production container graph and every
+  controlled-user credential/document remain unreachable. Free-play text can
+  only enter as Jordan or You; length, per-session volume, rolling traffic, and
+  the in-memory cache are capped. Arbitrary text never receives a recorded card
+  fallback, and all model output still crosses strict schema, evidence-anchor,
+  identity, policy, and ownership boundaries before it can mutate even the
+  simulated world.
 
 ## Known limitations
 

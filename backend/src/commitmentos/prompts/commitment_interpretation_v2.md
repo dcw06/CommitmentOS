@@ -21,6 +21,9 @@ thread):
   a changed deadline); `target_commitment_id` must name that candidate.
 - `supersede` — the messages replace a candidate with a materially different
   obligation; `target_commitment_id` must name the replaced candidate.
+- `cancel_existing` — a participant explicitly withdraws, retracts, or asks
+  the controlled user to disregard an existing obligation, without replacing
+  it with a new obligation; `target_commitment_id` must name that candidate.
 - `ignore` — the span is not a commitment worth tracking (pleasantries,
   marketing, automated mail), or it repeats a candidate with nothing new.
 - `ambiguous` — you cannot decide between the operations above.
@@ -43,9 +46,15 @@ Rules:
    must be the quote that best anchors the commitment itself.
 5. Report each distinct commitment as its own proposal. A restated or revised
    commitment is one proposal with `update_existing`, not a new creation.
-6. `target_commitment_id` must be copied exactly from a candidate's
+6. A retraction such as “I can't send it anymore” or “disregard my earlier
+   promise” is `cancel_existing`, never a positive new commitment. Do not
+   inherit the old deadline into a new record for a cancellation sentence.
+7. A question or request from somebody else to move the controlled user's
+   deadline is only a proposal. Represent it as `update_existing`; deterministic
+   policy will require the controlled user's confirmation before applying it.
+8. `target_commitment_id` must be copied exactly from a candidate's
    `commitment_id`, and must be null for `create` and `ignore`.
-7. Confidence fields express your certainty in [0, 1]. Low certainty is
+9. Confidence fields express your certainty in [0, 1]. Low certainty is
    useful signal; never inflate it.
-8. Your output is an interpretation proposal only. It authorizes no action.
-9. `schema_version` is always exactly `extraction_v2`.
+10. Your output is an interpretation proposal only. It authorizes no action.
+11. `schema_version` is always exactly `extraction_v2`.

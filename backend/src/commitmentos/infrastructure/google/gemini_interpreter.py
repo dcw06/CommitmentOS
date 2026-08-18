@@ -46,6 +46,7 @@ class GeminiInterpreter:
         schema_version: str,
         thinking_level: str,
         controlled_display_name: str,
+        request_timeout_seconds: float = 45,
     ) -> None:
         self._client_factory = client_factory
         self._client: Any = None
@@ -54,6 +55,7 @@ class GeminiInterpreter:
         self._schema_version = schema_version
         self._thinking_level = thinking_level
         self._controlled_display_name = controlled_display_name
+        self._request_timeout_seconds = request_timeout_seconds
         self._prompt_template = (
             PROMPTS_DIRECTORY / f"{prompt_version}.md"
         ).read_text(encoding="utf-8")
@@ -65,8 +67,8 @@ class GeminiInterpreter:
         candidate_commitments: Sequence[Mapping[str, str]],
     ) -> InterpretationResult:
         prompt = self._render_prompt(source_text, source_metadata, candidate_commitments)
-        response, latency_ms, thinking_applied = await asyncio.to_thread(
-            self._generate, prompt, gemini_response_schema()
+        response, latency_ms, thinking_applied = await self._generate_with_deadline(
+            prompt, gemini_response_schema()
         )
         wire, error_codes = parse_interpretation_wire(response.text or "")
         if wire is None:
@@ -96,8 +98,7 @@ class GeminiInterpreter:
                 "</trusted_evidence>",
             )
         )
-        response, latency_ms, thinking_applied = await asyncio.to_thread(
-            self._generate,
+        response, latency_ms, thinking_applied = await self._generate_with_deadline(
             prompt,
             {
                 "type": "object",
@@ -128,6 +129,19 @@ class GeminiInterpreter:
 
     # ------------------------------------------------------------------
 
+    async def _generate_with_deadline(
+        self,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+    ) -> tuple[Any, int, bool]:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._generate, prompt, response_schema),
+                timeout=self._request_timeout_seconds,
+            )
+        except TimeoutError as error:
+            raise TimeoutError("Gemini request exceeded its application deadline") from error
+
     def _generate(
         self,
         prompt: str,
@@ -152,9 +166,12 @@ class GeminiInterpreter:
                 config=genai_types.GenerateContentConfig(**config_kwargs),
             )
             thinking_applied = True
-        except Exception:
+        except Exception as error:
             # Phase 0 §7 fallback: retry once without the thinking config in
-            # case the deployed API version rejects it.
+            # the one known compatibility case only. Auth, quota, timeout, 429,
+            # and 5xx failures must never double public spend.
+            if not self._thinking_config_unsupported(error):
+                raise
             config_kwargs.pop("thinking_config")
             response = self._client.models.generate_content(
                 model=self._model_id,
@@ -164,6 +181,27 @@ class GeminiInterpreter:
             thinking_applied = False
         latency_ms = int((time.monotonic() - started) * 1000)
         return response, latency_ms, thinking_applied
+
+    @staticmethod
+    def _thinking_config_unsupported(error: Exception) -> bool:
+        if getattr(error, "code", None) != 400:
+            return False
+        detail = " ".join(
+            (
+                str(error),
+                str(getattr(error, "response_json", "")),
+            )
+        ).casefold()
+        return "thinking" in detail and any(
+            marker in detail
+            for marker in (
+                "unsupported",
+                "not supported",
+                "invalid",
+                "unknown",
+                "unrecognized",
+            )
+        )
 
     def _render_prompt(
         self,

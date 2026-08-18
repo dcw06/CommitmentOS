@@ -629,6 +629,7 @@ body:has(.sandbox) main {
 
 .sandbox-left,
 .sandbox-right {
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -684,9 +685,21 @@ body:has(.sandbox) main {
 }
 
 .sandbox-sender {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 600;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.sandbox-sender em {
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  padding: 1px 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .sandbox-note {
@@ -695,6 +708,168 @@ body:has(.sandbox) main {
   border-top: 1px dashed var(--border);
   padding-top: 6px;
   margin-top: 8px !important;
+}
+
+.sandbox-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #e8d5a6;
+  border-radius: 6px;
+  background: var(--warn-soft);
+}
+
+.sandbox-retry p {
+  margin: 0;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.sandbox-retry button {
+  flex: none;
+}
+
+.sandbox-thread-subject {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.sandbox-mode-chooser {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.sandbox-mode-chooser > div {
+  border: 1px solid #c9d8f7;
+  border-radius: var(--radius);
+  background: #fbfcff;
+  padding: 12px;
+  min-width: 0;
+}
+
+.sandbox-mode-chooser h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sandbox-mode-chooser p,
+.sandbox-mode-chooser label {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.sandbox-mode-chooser label,
+.sandbox-mode-chooser input {
+  display: block;
+  width: 100%;
+}
+
+.sandbox-mode-chooser input {
+  margin: 4px 0 10px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.sandbox-mode-chooser button {
+  width: 100%;
+}
+
+.sandbox-composer {
+  border: 1px solid #c9d8f7;
+  border-radius: var(--radius);
+  background: #fbfcff;
+  padding: 12px;
+  margin-top: 16px;
+}
+
+.sandbox-composer-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.sandbox-composer h3 {
+  margin: 0 0 3px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+}
+
+.sandbox-composer p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.sandbox-composer label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sandbox-composer-head label {
+  flex: none;
+}
+
+.sandbox-composer select,
+.sandbox-composer textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.sandbox-composer select {
+  min-width: 132px;
+  padding: 7px 28px 7px 8px;
+}
+
+.sandbox-message-field {
+  display: block;
+  margin-top: 10px;
+}
+
+.sandbox-composer textarea {
+  min-height: 88px;
+  resize: vertical;
+  padding: 9px;
+  line-height: 1.4;
+}
+
+.sandbox-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.sandbox-composer-actions span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.sandbox-composer-actions button {
+  flex: none;
 }
 
 .sandbox-card {
@@ -802,14 +977,25 @@ body:has(.sandbox) main {
   margin-bottom: 10px;
 }
 
-.sandbox-approval input {
+.sandbox-approval input,
+.sandbox-approval select {
   display: block;
-  width: 120px;
+  width: min(100%, 360px);
   margin-top: 4px;
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 14px;
+}
+
+.sandbox-approval-context strong {
+  color: var(--text);
+}
+
+.sandbox-approval-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .sandbox-commitment {
@@ -1007,6 +1193,69 @@ body:has(.sandbox) main {
 .sandbox-activity span {
   color: var(--text-muted);
   font-size: 12.5px;
+}
+
+@media (max-width: 600px) {
+  body:has(.sandbox) main {
+    padding: 8px 10px 36px;
+    min-width: 0;
+  }
+
+  .sandbox {
+    padding: 8px 0 28px;
+    min-width: 0;
+  }
+
+  .sandbox-tour {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .sandbox-tour button {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .sandbox-split,
+  .sandbox-card,
+  .sandbox-card-head,
+  .sandbox-message,
+  .sandbox-commitment,
+  .sandbox-composer,
+  .sandbox-mode-chooser,
+  .sandbox-composer-head {
+    min-width: 0;
+  }
+
+  .sandbox-mode-chooser {
+    grid-template-columns: 1fr;
+  }
+
+  .sandbox-composer-head,
+  .sandbox-composer-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .sandbox-composer-head label,
+  .sandbox-composer-actions button {
+    width: 100%;
+  }
+
+  .sandbox-card-label,
+  .sandbox-card-body,
+  .sandbox-message p,
+  .sandbox-tour p,
+  .sandbox-activity span {
+    overflow-wrap: anywhere;
+  }
+
+  .sandbox-calendar {
+    overflow-x: auto;
+  }
 }
 
 .demo-banner a {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
@@ -20,9 +21,11 @@ from commitmentos.application.services.projection_guard import (
 )
 from commitmentos.contracts.model_output import (
     CommitmentSemanticProposalV1,
+    DeadlineProposalV1,
     ModelOutputValidator,
     ModelValidationDisposition,
     ProposalValidationResult,
+    collapse_text,
     derive_semantic_fingerprint,
     derive_span_key,
     neutralize_untrusted_delimiters,
@@ -88,6 +91,30 @@ def derive_calendar_event_id(calendar_id: str, work_block_id: str) -> str:
     identity (plan §9.4).
     """
     return CalendarEventIdFactory().derive(calendar_id, work_block_id)
+
+
+_EXPLICIT_RETRACTION = re.compile(
+    r"\b(?:cancel(?:led|ing)?|withdraw(?:n|ing)?|retract(?:ed|ing)?)\b"
+    r"|\b(?:disregard|ignore)\b.{0,80}\b(?:earlier|previous|promise|commitment)\b"
+    r"|\b(?:can(?:not|'t)|won't|will not)\b.{0,100}\b(?:anymore|after all)\b"
+    r"|\bno longer\s+(?:can|will|able to)\b",
+    re.IGNORECASE,
+)
+
+_IDENTITY_OPEN_STATUSES = frozenset(
+    {
+        LifecycleStatus.CANDIDATE,
+        LifecycleStatus.AWAITING_CONFIRMATION,
+        LifecycleStatus.ACTIVE,
+        LifecycleStatus.IN_PROGRESS,
+        LifecycleStatus.COMPLETION_CANDIDATE,
+        LifecycleStatus.PAUSED,
+    }
+)
+
+
+def _counted(count: int, noun: str) -> str:
+    return f"{count} {noun if count == 1 else noun + 's'}"
 
 
 class DurableReconciliationWorkflow:
@@ -650,11 +677,20 @@ class DurableReconciliationWorkflow:
 
         now = self._clock.now()
         metadata = result.metadata
+        messages_by_id = {message.message_id: message for message in messages}
 
         async def _apply(repositories: RepositorySet) -> tuple[str, ...]:
             durable: list[str] = []
             audit_operations: list[Mapping[str, Any]] = []
             for proposal_result in validation.proposals:
+                model_operation = proposal_result.proposal.proposed_identity_operation
+                proposal_result, identity_guard_reason, force_confirmation = (
+                    self._guard_explicit_retraction(
+                        proposal_result,
+                        candidates,
+                        messages_by_id,
+                    )
+                )
                 proposal = proposal_result.proposal
                 resolution = self._identity_resolver.resolve(
                     IdentityProposal(
@@ -672,6 +708,20 @@ class DurableReconciliationWorkflow:
                     candidates,
                     dismissed_span_keys,
                 )
+                if self._is_counterparty_deadline_proposal(
+                    proposal,
+                    resolution,
+                    candidates,
+                    messages_by_id,
+                ):
+                    force_confirmation = True
+                    identity_guard_reason = (
+                        "counterparty_deadline_change_requires_confirmation"
+                    )
+                    resolution = replace(
+                        resolution,
+                        reason=identity_guard_reason,
+                    )
                 ids = await self._apply_identity_resolution(
                     repositories,
                     request,
@@ -679,17 +729,47 @@ class DurableReconciliationWorkflow:
                     proposal_result,
                     resolution,
                     now,
+                    force_confirmation=force_confirmation,
                 )
                 durable.extend(ids)
                 audit_operations.append(
                     {
                         "source_span_key": proposal.source_span_key,
-                        "proposed_operation": proposal.proposed_identity_operation.value,
+                        "proposed_operation": model_operation.value,
+                        "guarded_operation": proposal.proposed_identity_operation.value,
                         "final_operation": resolution.operation.value,
                         "target_commitment_id": resolution.target_commitment_id,
                         "reason": resolution.reason,
                         "disposition": proposal_result.disposition.value,
+                        "authority_guard": identity_guard_reason,
                     }
+                )
+            operation_counts: dict[str, int] = {}
+            for operation in audit_operations:
+                final_operation = str(operation["final_operation"])
+                operation_counts[final_operation] = (
+                    operation_counts.get(final_operation, 0) + 1
+                )
+            proposal_count = len(audit_operations)
+            if proposal_count == 0:
+                interpretation_summary = (
+                    "Interpreted thread activity: no commitment proposals detected; "
+                    "durable commitment state unchanged"
+                )
+            elif set(operation_counts) == {IdentityOperation.IGNORE.value}:
+                interpretation_summary = (
+                    f"Interpreted {_counted(proposal_count, 'proposal')}: "
+                    f"{_counted(proposal_count, 'ignore operation')}; "
+                    "durable commitment state unchanged"
+                )
+            else:
+                operation_summary = ", ".join(
+                    _counted(count, f"{operation.replace('_', ' ')} operation")
+                    for operation, count in sorted(operation_counts.items())
+                )
+                interpretation_summary = (
+                    f"Interpreted {_counted(proposal_count, 'proposal')}: "
+                    f"{operation_summary}"
                 )
             # §9.6 step 6: candidate set, proposed and final operations, and
             # reasons all land in the audit timeline; model audit metadata is
@@ -700,10 +780,7 @@ class DurableReconciliationWorkflow:
                     event_type=ActivityEventType.INTERPRETATION_CREATED,
                     trace_id=request.trace_id,
                     actor="reconciliation",
-                    summary=(
-                        f"Interpreted thread activity: {len(validation.proposals)} "
-                        "proposal(s) resolved"
-                    ),
+                    summary=interpretation_summary,
                     payload={
                         "observation_id": observation.observation_id,
                         "thread_id": thread_id,
@@ -724,6 +801,129 @@ class DurableReconciliationWorkflow:
         durable_ids = await self._unit_of_work.run_fenced(request.processing_fence, _apply)
         return self._outcome(request, "processed", durable_ids, None)
 
+    @staticmethod
+    def _guard_explicit_retraction(
+        proposal_result: ProposalValidationResult,
+        candidates: list[Commitment],
+        messages_by_id: Mapping[str, GmailMessage],
+    ) -> tuple[ProposalValidationResult, str | None, bool]:
+        """Fail closed when commitment language explicitly retracts a promise.
+
+        Gemini still proposes identity, but a strong retraction marker cannot
+        become a positive `create`. A unique open in-thread target is required;
+        otherwise the span is ignored rather than minting a cancellation-shaped
+        commitment. Retractions by the owner of the obligation apply directly;
+        attempts by another participant require controlled-user confirmation.
+        """
+        proposal = proposal_result.proposal
+        evidence_text = " ".join(span.excerpt for span in proposal.evidence)
+        explicit = _EXPLICIT_RETRACTION.search(evidence_text) is not None
+        if not explicit and proposal.proposed_identity_operation != (
+            IdentityOperation.CANCEL_EXISTING
+        ):
+            return proposal_result, None, False
+
+        target = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.commitment_id == proposal.target_commitment_id
+                and candidate.lifecycle_status in _IDENTITY_OPEN_STATUSES
+            ),
+            None,
+        )
+        if target is None:
+            open_candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.lifecycle_status in _IDENTITY_OPEN_STATUSES
+            ]
+            if len(open_candidates) == 1:
+                target = open_candidates[0]
+        if target is None:
+            guarded = replace(
+                proposal,
+                proposed_identity_operation=IdentityOperation.IGNORE,
+                target_commitment_id=None,
+            )
+            return (
+                replace(proposal_result, proposal=guarded),
+                "retraction_target_not_unique_ignored",
+                False,
+            )
+
+        source = messages_by_id.get(proposal.evidence[0].message_id)
+        outbound = source is not None and "SENT" in source.label_ids
+        participant_owns_obligation = (
+            outbound and target.ownership_type == OwnershipType.MY_COMMITMENT
+        ) or (
+            not outbound
+            and target.ownership_type
+            in (OwnershipType.COMMITMENT_TO_ME, OwnershipType.REQUEST_TO_ME)
+        )
+        guarded = replace(
+            proposal,
+            ownership_type=target.ownership_type,
+            proposed_identity_operation=IdentityOperation.CANCEL_EXISTING,
+            target_commitment_id=target.commitment_id,
+        )
+        return (
+            replace(proposal_result, proposal=guarded),
+            (
+                "explicit_retraction_by_obligation_owner"
+                if participant_owns_obligation
+                else "retraction_requires_controlled_user_confirmation"
+            ),
+            not participant_owns_obligation,
+        )
+
+    @staticmethod
+    def _is_counterparty_deadline_proposal(
+        proposal: CommitmentSemanticProposalV1,
+        resolution: IdentityResolution,
+        candidates: list[Commitment],
+        messages_by_id: Mapping[str, GmailMessage],
+    ) -> bool:
+        """A counterparty cannot silently rewrite the user's binding deadline."""
+        if (
+            resolution.operation != IdentityOperation.UPDATE_EXISTING
+            or proposal.deadline is None
+            or proposal.deadline.proposed_value is None
+        ):
+            return False
+        target = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.commitment_id == resolution.target_commitment_id
+            ),
+            None,
+        )
+        if target is None or target.ownership_type != OwnershipType.MY_COMMITMENT:
+            return False
+        try:
+            proposed_value = datetime.fromisoformat(proposal.deadline.proposed_value)
+        except ValueError:
+            return False
+        if proposed_value == target.deadline.value:
+            return False
+
+        expression = collapse_text(proposal.deadline.source_expression)
+        deadline_sources = [
+            messages_by_id[span.message_id]
+            for span in proposal.evidence
+            if span.message_id in messages_by_id
+            and expression
+            and expression in collapse_text(messages_by_id[span.message_id].body_text)
+        ]
+        if not deadline_sources and proposal.evidence:
+            source = messages_by_id.get(proposal.evidence[0].message_id)
+            if source is not None:
+                deadline_sources = [source]
+        return bool(deadline_sources) and all(
+            "SENT" not in message.label_ids for message in deadline_sources
+        )
+
     async def _apply_identity_resolution(
         self,
         repositories: RepositorySet,
@@ -732,6 +932,8 @@ class DurableReconciliationWorkflow:
         proposal_result: ProposalValidationResult,
         resolution: IdentityResolution,
         now: datetime,
+        *,
+        force_confirmation: bool = False,
     ) -> tuple[str, ...]:
         proposal = proposal_result.proposal
         # Deterministic dismissal suppression outranks model confidence and
@@ -740,6 +942,8 @@ class DurableReconciliationWorkflow:
         if resolution.operation == IdentityOperation.IGNORE:
             return ()
         needs_confirmation = (
+            force_confirmation
+            or
             proposal_result.disposition == ModelValidationDisposition.CONFIRMATION_REQUIRED
             or resolution.operation == IdentityOperation.AMBIGUOUS
         )
@@ -761,6 +965,13 @@ class DurableReconciliationWorkflow:
                 repositories, request, observation, proposal, now
             )
             return canceled + created
+        if resolution.operation == IdentityOperation.CANCEL_EXISTING:
+            return await self._cancel_retracted_target(
+                repositories,
+                request,
+                resolution,
+                now,
+            )
         return ()
 
     async def _create_commitment_from_proposal(
@@ -770,6 +981,8 @@ class DurableReconciliationWorkflow:
         observation: ObservationV1,
         proposal: CommitmentSemanticProposalV1,
         now: datetime,
+        *,
+        deadline_confirmation: Mapping[str, Any] | None = None,
     ) -> tuple[str, ...]:
         thread_id = observation.source_reference.get("thread_id", "")
         commitment_id = CanonicalEncoder.hash(
@@ -792,6 +1005,33 @@ class DurableReconciliationWorkflow:
         evidence_ids = await self._upsert_evidence(
             repositories, observation, commitment_id, proposal, now
         )
+        deadline_evidence_id = evidence_ids[0]
+        if deadline_confirmation is not None:
+            approval_id = str(deadline_confirmation["approval_id"])
+            deadline_evidence_id = CanonicalEncoder.hash(
+                ["evidence:v1", approval_id, "deadline_confirmation"]
+            )
+            if await repositories.evidence.get(deadline_evidence_id) is None:
+                await repositories.evidence.create(
+                    {
+                        "evidence_id": deadline_evidence_id,
+                        "commitment_id": commitment_id,
+                        "source_reference": {
+                            "approval_id": approval_id,
+                            "kind": "explicit_user_confirmation",
+                        },
+                        "evidence_type": "deadline_confirmation",
+                        "excerpt": (
+                            "Deadline explicitly supplied as "
+                            f"{deadline_confirmation['deadline']}"
+                        ),
+                        "confidence": 1.0,
+                        "model_version": "deterministic_confirmation_v1",
+                        "schema_version": "deadline_confirmation_v1",
+                        "created_at": now,
+                    }
+                )
+            evidence_ids = (*evidence_ids, deadline_evidence_id)
         actionable = proposal.ownership_type == OwnershipType.MY_COMMITMENT
         commitment = Commitment(
             commitment_id=commitment_id,
@@ -815,7 +1055,7 @@ class DurableReconciliationWorkflow:
                 value=datetime.fromisoformat(proposal.deadline.proposed_value),
                 timezone=self._controlled_timezone,
                 confidence=proposal.deadline.confidence,
-                evidence_id=evidence_ids[0],
+                evidence_id=deadline_evidence_id,
                 source_expression=proposal.deadline.source_expression,
                 rule_version="deadline_normalization_v1",
             ),
@@ -1099,8 +1339,10 @@ class DurableReconciliationWorkflow:
         updated = replace(
             target,
             lifecycle_status=LifecycleStatus.CANCELED,
+            projection=None,
             revision=target.revision + 1,
             updated_at=now,
+            last_reconciled_at=now,
         )
         await repositories.commitments.save(updated, target.revision)
         await repositories.activity.append(
@@ -1120,6 +1362,97 @@ class DurableReconciliationWorkflow:
         )
         return (target.commitment_id,)
 
+    async def _cancel_retracted_target(
+        self,
+        repositories: RepositorySet,
+        request: ReconciliationRequest,
+        resolution: IdentityResolution,
+        now: datetime,
+    ) -> tuple[str, ...]:
+        target = await repositories.commitments.get(
+            resolution.target_commitment_id or ""
+        )
+        if target is None or target.lifecycle_status == LifecycleStatus.CANCELED:
+            return ()
+        canceled = replace(
+            target,
+            lifecycle_status=LifecycleStatus.CANCELED,
+            projection=None,
+            revision=target.revision + 1,
+            updated_at=now,
+            last_reconciled_at=now,
+        )
+        await repositories.commitments.save(canceled, target.revision)
+        superseded_approval_ids = await self._supersede_pending_approvals(
+            repositories,
+            request,
+            target.commitment_id,
+            "commitment_canceled_by_retraction",
+            now,
+        )
+        await repositories.activity.append(
+            self._activity_factory.create(
+                user_id=request.user_id,
+                event_type=ActivityEventType.INTERPRETATION_CREATED,
+                trace_id=request.trace_id,
+                actor="reconciliation",
+                summary=f"Commitment canceled from explicit retraction: {target.title}",
+                payload={
+                    "commitment_id": target.commitment_id,
+                    "operation": "cancel_existing",
+                    "reason": resolution.reason,
+                    "superseded_approval_ids": list(superseded_approval_ids),
+                },
+                created_at=now,
+            )
+        )
+        return (target.commitment_id, *superseded_approval_ids)
+
+    async def _supersede_pending_approvals(
+        self,
+        repositories: RepositorySet,
+        request: ReconciliationRequest,
+        commitment_id: str,
+        reason: str,
+        now: datetime,
+    ) -> tuple[str, ...]:
+        superseded: list[str] = []
+        for approval in await repositories.approvals.list_pending(request.user_id):
+            if approval.get("commitment_id") != commitment_id:
+                continue
+            approval_id = str(approval["approval_id"])
+            await repositories.approvals.resolve(
+                approval_id,
+                int(approval["revision"]),
+                {
+                    "status": "superseded",
+                    "reason": reason,
+                    "actor": "reconciliation",
+                    "resolved_at": now,
+                },
+            )
+            superseded.append(approval_id)
+        if superseded:
+            await repositories.activity.append(
+                self._activity_factory.create(
+                    user_id=request.user_id,
+                    event_type=ActivityEventType.CONFIRMATION_RECORDED,
+                    trace_id=request.trace_id,
+                    actor="reconciliation",
+                    summary=(
+                        f"Superseded {_counted(len(superseded), 'pending confirmation')} "
+                        "after commitment cancellation"
+                    ),
+                    payload={
+                        "commitment_id": commitment_id,
+                        "approval_ids": superseded,
+                        "reason": reason,
+                    },
+                    created_at=now,
+                )
+            )
+        return tuple(superseded)
+
     async def _record_identity_confirmation(
         self,
         repositories: RepositorySet,
@@ -1129,11 +1462,20 @@ class DurableReconciliationWorkflow:
         resolution: IdentityResolution,
         now: datetime,
     ) -> tuple[str, ...]:
+        request_type = {
+            "counterparty_deadline_change_requires_confirmation": (
+                "deadline_change_confirmation"
+            ),
+            "missing_deadline": "deadline_required_confirmation",
+            "retraction_requires_controlled_user_confirmation": (
+                "retraction_confirmation"
+            ),
+        }.get(resolution.reason, "identity_confirmation")
         approval_id = CanonicalEncoder.hash(
             [
                 "approval:v1",
                 observation.observation_id,
-                "identity_confirmation",
+                request_type,
                 proposal.source_span_key,
             ]
         )
@@ -1148,7 +1490,7 @@ class DurableReconciliationWorkflow:
                 "user_id": request.user_id,
                 "commitment_id": resolution.target_commitment_id or "",
                 "commitment_revision": target.revision if target is not None else 0,
-                "request_type": "identity_confirmation",
+                "request_type": request_type,
                 "payload": {
                     # Keep the compact Phase 2 dashboard fields while also
                     # storing the full safe proposal needed by this durable
@@ -1160,12 +1502,22 @@ class DurableReconciliationWorkflow:
                     "reason": resolution.reason,
                     "source_observation_id": observation.observation_id,
                     "source_reference": dict(observation.source_reference),
+                    "resolution_operation": resolution.operation.value,
                     "resolution_reason": resolution.reason,
                     "resolution_target_commitment_id": resolution.target_commitment_id,
                     "proposal": self._proposal_to_document(proposal),
                 },
-                "continuation_type": "identity_confirmation",
-                "policy_reason": "uncertain_interpretation_requires_confirmation",
+                "continuation_type": request_type,
+                "policy_reason": (
+                    resolution.reason
+                    if resolution.reason
+                    in {
+                        "counterparty_deadline_change_requires_confirmation",
+                        "retraction_requires_controlled_user_confirmation",
+                        "missing_deadline",
+                    }
+                    else "uncertain_interpretation_requires_confirmation"
+                ),
                 "status": "pending",
                 "revision": 1,
                 "created_at": now,
@@ -1175,10 +1527,34 @@ class DurableReconciliationWorkflow:
         await repositories.activity.append(
             self._activity_factory.create(
                 user_id=request.user_id,
-                event_type=ActivityEventType.CONFIRMATION_RECORDED,
+                event_type=(
+                    ActivityEventType.DEADLINE_CHANGE_CONFIRMATION
+                    if request_type == "deadline_change_confirmation"
+                    else (
+                        ActivityEventType.DEADLINE_REQUIRED_CONFIRMATION
+                        if request_type == "deadline_required_confirmation"
+                        else (
+                            ActivityEventType.RETRACTION_CONFIRMATION
+                            if request_type == "retraction_confirmation"
+                            else ActivityEventType.CONFIRMATION_RECORDED
+                        )
+                    )
+                ),
                 trace_id=request.trace_id,
                 actor="reconciliation",
-                summary="Interpretation requires confirmation",
+                summary=(
+                    "Counterparty deadline proposal awaits your acceptance"
+                    if request_type == "deadline_change_confirmation"
+                    else (
+                        "A deadline is required before this commitment can be created"
+                        if request_type == "deadline_required_confirmation"
+                        else (
+                            "Retraction awaits controlled-user confirmation"
+                            if request_type == "retraction_confirmation"
+                            else "Interpretation requires confirmation"
+                        )
+                    )
+                ),
                 payload={
                     "approval_id": approval_id,
                     "observation_id": observation.observation_id,
@@ -1801,9 +2177,22 @@ class DurableReconciliationWorkflow:
         if approval.get("status") != "resolved":
             return self._outcome(request, "ignored", (), "approval_not_resolved")
         decision = approval.get("decision", {})
-        if approval.get("request_type") == "identity_confirmation":
+        if approval.get("request_type") in {
+            "identity_confirmation",
+            "deadline_change_confirmation",
+            "deadline_required_confirmation",
+            "retraction_confirmation",
+        }:
             return await self._apply_identity_confirmation(request, approval)
         if decision.get("decision") != "approve":
+            if approval.get("request_type") in {
+                "effort_confirmation",
+                "initial_plan_approval",
+            }:
+                return await self._recover_rejected_planning_approval(
+                    request,
+                    approval,
+                )
             return self._outcome(request, "processed", (), None)
         if approval.get("request_type") == "effort_confirmation":
             return await self._propose_initial_plan(request, approval)
@@ -1882,20 +2271,251 @@ class DurableReconciliationWorkflow:
                 )
             else:
                 proposal_to_apply = proposal
+            deadline_confirmation = None
+            if approval.get("request_type") == "deadline_required_confirmation":
+                supplied_deadline = decision_payload.get("deadline")
+                if supplied_deadline is None:
+                    return ()
+                deadline_confirmation = {
+                    "approval_id": approval["approval_id"],
+                    "deadline": str(supplied_deadline),
+                }
+                proposal_to_apply = replace(
+                    proposal_to_apply,
+                    deadline=DeadlineProposalV1(
+                        source_expression="supplied in explicit confirmation",
+                        proposed_value=str(supplied_deadline),
+                        confidence=1.0,
+                    ),
+                )
             if proposal_to_apply.ownership_type == OwnershipType.AMBIGUOUS:
                 return ()
+            operation_value = str(
+                payload.get("resolution_operation")
+                or proposal_to_apply.proposed_identity_operation.value
+            )
+            operation = IdentityOperation(operation_value)
+            target_commitment_id = payload.get(
+                "resolution_target_commitment_id"
+            )
+            if operation == IdentityOperation.UPDATE_EXISTING and target_commitment_id:
+                return await self._update_commitment_from_proposal(
+                    repositories,
+                    request,
+                    observation,
+                    proposal_to_apply,
+                    IdentityResolution(
+                        operation,
+                        str(target_commitment_id),
+                        (str(target_commitment_id),),
+                        str(payload.get("resolution_reason") or "user_confirmed"),
+                    ),
+                    now,
+                )
+            if operation == IdentityOperation.CANCEL_EXISTING and target_commitment_id:
+                return await self._cancel_retracted_target(
+                    repositories,
+                    request,
+                    IdentityResolution(
+                        operation,
+                        str(target_commitment_id),
+                        (str(target_commitment_id),),
+                        str(payload.get("resolution_reason") or "user_confirmed"),
+                    ),
+                    now,
+                )
+            if operation == IdentityOperation.SUPERSEDE and target_commitment_id:
+                resolution = IdentityResolution(
+                    operation,
+                    str(target_commitment_id),
+                    (str(target_commitment_id),),
+                    str(payload.get("resolution_reason") or "user_confirmed"),
+                )
+                canceled = await self._cancel_superseded_target(
+                    repositories,
+                    request,
+                    resolution,
+                    now,
+                )
+                created = await self._create_commitment_from_proposal(
+                    repositories,
+                    request,
+                    observation,
+                    proposal_to_apply,
+                    now,
+                )
+                return canceled + created
             return await self._create_commitment_from_proposal(
                 repositories,
                 request,
                 observation,
                 proposal_to_apply,
                 now,
+                deadline_confirmation=deadline_confirmation,
             )
 
         durable_ids = await self._unit_of_work.run_fenced(request.processing_fence, _apply)
         if not durable_ids:
             return self._outcome(request, "rejected", (), "identity_application_failed")
         return self._outcome(request, "processed", durable_ids, None)
+
+    async def _recover_rejected_planning_approval(
+        self,
+        request: ReconciliationRequest,
+        approval: Mapping[str, Any],
+    ) -> ReconciliationOutcome:
+        """Keep a rejected estimate or first plan editable instead of dead-ending."""
+
+        now = self._clock.now()
+        commitment_id = str(approval.get("commitment_id") or "")
+        request_type = str(approval.get("request_type") or "")
+        reason = str(
+            (approval.get("decision") or {}).get("payload", {}).get("reason")
+            or "user_rejected"
+        )
+
+        async def _recover(repositories: RepositorySet) -> tuple[str, ...]:
+            commitment = await repositories.commitments.get(commitment_id)
+            if commitment is None or commitment.lifecycle_status in {
+                LifecycleStatus.COMPLETED,
+                LifecycleStatus.CANCELED,
+                LifecycleStatus.DISMISSED,
+            }:
+                return ()
+            durable: list[str] = []
+            planner_run_id = str(
+                (approval.get("payload") or {}).get("planner_run_id") or ""
+            )
+            if request_type == "initial_plan_approval" and planner_run_id:
+                planner_run = await repositories.planner_runs.get(planner_run_id)
+                if (
+                    planner_run is not None
+                    and planner_run.status == PlannerRunStatus.PUBLISHED
+                ):
+                    await repositories.planner_runs.save(
+                        replace(
+                            planner_run,
+                            status=PlannerRunStatus.STALE,
+                            stale_reason="user_rejected_initial_plan",
+                        ),
+                        PlannerRunStatus.PUBLISHED.value,
+                    )
+                    durable.append(planner_run_id)
+                if commitment.projection is not None:
+                    commitment = replace(
+                        commitment,
+                        projection=None,
+                        last_reconciled_at=now,
+                        updated_at=now,
+                    )
+                    await repositories.commitments.save(
+                        commitment,
+                        commitment.revision,
+                    )
+            replacement_id = await self._create_effort_reconsideration(
+                repositories,
+                request,
+                commitment,
+                source_id=str(approval["approval_id"]),
+                source_type=request_type,
+                rejection_reason=reason,
+                now=now,
+            )
+            durable.append(replacement_id)
+            return tuple(durable)
+
+        durable_ids = await self._unit_of_work.run_fenced(
+            request.processing_fence,
+            _recover,
+        )
+        if not durable_ids:
+            return self._outcome(
+                request,
+                "ignored",
+                (),
+                "planning_reconsideration_target_changed",
+            )
+        return self._outcome(request, "processed", durable_ids, None)
+
+    async def _create_effort_reconsideration(
+        self,
+        repositories: RepositorySet,
+        request: ReconciliationRequest,
+        commitment: Commitment,
+        *,
+        source_id: str,
+        source_type: str,
+        rejection_reason: str,
+        now: datetime,
+    ) -> str:
+        approval_id = CanonicalEncoder.hash(
+            [
+                "approval:v2",
+                commitment.commitment_id,
+                "effort_reconsideration",
+                commitment.revision,
+                source_id,
+            ]
+        )
+        if await repositories.approvals.get(approval_id) is None:
+            proposed_minutes = (
+                commitment.effort.confirmed_minutes
+                or commitment.effort.proposed_minutes
+            )
+            await repositories.approvals.create(
+                {
+                    "approval_id": approval_id,
+                    "user_id": request.user_id,
+                    "commitment_id": commitment.commitment_id,
+                    "commitment_revision": commitment.revision,
+                    "request_type": "effort_confirmation",
+                    "payload": {
+                        "proposed_minutes": proposed_minutes,
+                        "reconsideration": True,
+                        "previous_request_type": source_type,
+                        "previous_rejection_reason": rejection_reason,
+                    },
+                    "continuation_type": "effort_confirmation",
+                    "policy_reason": (
+                        "revise_effort_or_request_another_plan"
+                        if source_type == "initial_plan_approval"
+                        else (
+                            "portfolio_capacity_conflict"
+                            if source_type == "portfolio_capacity_conflict"
+                            else "effort_rejected_edit_and_confirm"
+                        )
+                    ),
+                    "status": "pending",
+                    "revision": 1,
+                    "created_at": now,
+                    "expires_at": now + timedelta(days=7),
+                }
+            )
+            await repositories.activity.append(
+                self._activity_factory.create(
+                    user_id=request.user_id,
+                    event_type=ActivityEventType.CONFIRMATION_RECORDED,
+                    trace_id=request.trace_id,
+                    actor="reconciliation",
+                    summary=(
+                        "First plan rejected; effort can be revised before replanning"
+                        if source_type == "initial_plan_approval"
+                        else (
+                            "No feasible plan exists; effort can be revised or retried"
+                            if source_type == "portfolio_capacity_conflict"
+                            else "Effort rejected; an editable confirmation was reissued"
+                        )
+                    ),
+                    payload={
+                        "approval_id": approval_id,
+                        "commitment_id": commitment.commitment_id,
+                        "previous_request_type": source_type,
+                        "previous_rejection_reason": rejection_reason,
+                    },
+                    created_at=now,
+                )
+            )
+        return approval_id
 
     @staticmethod
     def _proposal_to_document(
@@ -2043,6 +2663,76 @@ class DurableReconciliationWorkflow:
                 commitment = commitments.get(commitment_id)
                 if commitment is None or commitment.effort.confirmed_minutes is None:
                     return ("invalid", ())
+                target_allocation = next(
+                    (
+                        item
+                        for item in plan.allocations
+                        if item.commitment_id == commitment_id
+                    ),
+                    None,
+                )
+                if (
+                    not plan.feasible
+                    or target_allocation is None
+                    or target_allocation.shortfall_minutes > 0
+                ):
+                    stale = replace(
+                        plan,
+                        status=PlannerRunStatus.STALE,
+                        stale_reason="portfolio_capacity_conflict",
+                    )
+                    stored_run = await repositories.planner_runs.get(
+                        plan.planner_run_id
+                    )
+                    if stored_run is None:
+                        await repositories.planner_runs.create(stale)
+                    elif stored_run.status == PlannerRunStatus.CALCULATED:
+                        await repositories.planner_runs.save(
+                            stale,
+                            PlannerRunStatus.CALCULATED.value,
+                        )
+                    reconsideration_id = await self._create_effort_reconsideration(
+                        repositories,
+                        request,
+                        commitment,
+                        source_id=plan.planner_run_id,
+                        source_type="portfolio_capacity_conflict",
+                        rejection_reason="insufficient_capacity_before_deadline",
+                        now=now,
+                    )
+                    await repositories.activity.append(
+                        self._activity_factory.create(
+                            user_id=request.user_id,
+                            event_type=ActivityEventType.FAILURE_RECORDED,
+                            trace_id=request.trace_id,
+                            actor="portfolio_planner",
+                            summary=(
+                                "No approvable first plan: available capacity does not "
+                                "cover the confirmed effort"
+                            ),
+                            payload={
+                                "commitment_id": commitment_id,
+                                "planner_run_id": plan.planner_run_id,
+                                "feasible": plan.feasible,
+                                "allocated_work_minutes": (
+                                    target_allocation.allocated_work_minutes
+                                    if target_allocation is not None
+                                    else 0
+                                ),
+                                "shortfall_minutes": (
+                                    target_allocation.shortfall_minutes
+                                    if target_allocation is not None
+                                    else commitment.effort.confirmed_minutes
+                                ),
+                                "approval_created": reconsideration_id,
+                            },
+                            created_at=now,
+                        )
+                    )
+                    return (
+                        "infeasible",
+                        (plan.planner_run_id, reconsideration_id),
+                    )
                 approval_id = CanonicalEncoder.hash(
                     [
                         "approval:v1",
@@ -2144,7 +2834,8 @@ class DurableReconciliationWorkflow:
                         actor="portfolio_planner",
                         summary=(
                             f"Constraint-safe portfolio plan proposed: "
-                            f"{len(proposed_blocks)} work blocks"
+                            f"{len(proposed_blocks)} work "
+                            f"{'block' if len(proposed_blocks) == 1 else 'blocks'}"
                         ),
                         payload={
                             "commitment_id": commitment_id,
@@ -2181,6 +2872,13 @@ class DurableReconciliationWorkflow:
             )
             if disposition == "published":
                 return self._outcome(request, "processed", durable_ids, None)
+            if disposition == "infeasible":
+                return self._outcome(
+                    request,
+                    "processed",
+                    durable_ids,
+                    "portfolio_capacity_conflict",
+                )
             if disposition != "stale":
                 break
         return self._outcome(
@@ -2466,7 +3164,8 @@ class DurableReconciliationWorkflow:
                     actor="reconciliation",
                     summary=(
                         f"Plan approved: {len(plan_diff.mutations)} "
-                        "Calendar actions written to the outbox"
+                        f"Calendar {'action' if len(plan_diff.mutations) == 1 else 'actions'} "
+                        "written to the outbox"
                     ),
                     payload={
                         "commitment_id": commitment_id,
@@ -3064,8 +3763,9 @@ class DurableReconciliationWorkflow:
                     trace_id=request.trace_id,
                     actor="stable_plan_repairer",
                     summary=(
-                        f"Minimal repair moved {plan_diff.moved_block_count} block(s) "
-                        f"and preserved {len(plan_diff.preserved_work_block_ids)}"
+                        f"Minimal repair moved "
+                        f"{_counted(plan_diff.moved_block_count, 'block')} and preserved "
+                        f"{_counted(len(plan_diff.preserved_work_block_ids), 'block')}"
                     ),
                     payload={
                         "source_observation_id": observation.observation_id,
@@ -3147,13 +3847,15 @@ class DurableReconciliationWorkflow:
         approval_required: bool,
     ) -> Mapping[str, Any]:
         fallback = (
-            f"The calendar change affected {plan_diff.moved_block_count} work block(s). "
+            f"The calendar change affected "
+            f"{_counted(plan_diff.moved_block_count, 'work block')}. "
             + (
                 "The proposed repair is waiting for approval."
                 if approval_required
                 else "CommitmentOS applied the smallest policy-permitted repair."
             )
-            + f" {len(plan_diff.preserved_work_block_ids)} block(s) stayed unchanged."
+            + f" {_counted(len(plan_diff.preserved_work_block_ids), 'block')} "
+            "stayed unchanged."
         )
         if self._model_interpreter is None:
             return {"text": fallback, "source": "deterministic_fallback"}
@@ -3636,7 +4338,17 @@ class DurableReconciliationWorkflow:
                         summary=(
                             "Undo reconciled by replanning from current facts"
                             if reason == "undo_requested"
-                            else "Portfolio replanned after verified progress changed"
+                            else (
+                                "Portfolio refreshed after a block elapsed; "
+                                "awaiting verified-minute check-in"
+                                if reason == "work_block_lifecycle_changed"
+                                else (
+                                    "Portfolio replanned after commitment completion; "
+                                    "verified progress unchanged"
+                                    if reason == "commitment_completed"
+                                    else "Portfolio replanned after verified progress changed"
+                                )
+                            )
                         ),
                         payload={
                             "source_observation_id": observation.observation_id,

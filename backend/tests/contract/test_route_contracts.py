@@ -783,6 +783,32 @@ class TestFullDemoMutationMatrix:
             assert "csrf" not in body.lower()
             assert "/api/v1/" not in body
             assert "set-cookie" not in response.headers
+        today_document = today.json()
+        commitment_rows = commitments.json()
+        professor = next(
+            row
+            for row in commitment_rows
+            if row["title"] == "Send revised proposal to Professor Chen"
+        )
+        assert professor["lifecycle_status"] == "completed"
+        assert professor["remaining_minutes"] is None
+        assert not today_document["pending_decisions"]
+        assert {
+            row["commitment_title"] for row in today_document["today_blocks"]
+        } == {"Prepare Q3 data summary for Sam"}
+        current_reserved = sum(
+            60
+            for row in commitment_rows
+            for block in row["work_blocks"]
+            if block["execution_state"] in {"planned", "active"}
+        )
+        assert today_document["outcome_strip"]["work_minutes_reserved"] == (
+            current_reserved
+        )
+        assert any(
+            row["event"] == "deadline_change_confirmation"
+            for row in activity.json()
+        )
         assert app.store == before
 
     async def test_demo_read_model_has_no_live_data_access_path(self) -> None:

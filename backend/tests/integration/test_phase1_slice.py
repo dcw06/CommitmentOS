@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
+import pytest
 from conftest import (
     CALENDAR_ID,
     CONTROLLED_USER,
@@ -314,6 +315,86 @@ class TestExecutionControls:
 
 
 class TestDurability:
+    async def test_effort_rejection_reissues_an_editable_confirmation(
+        self, app: Phase1App
+    ) -> None:
+        await app.seed_golden_observation()
+        await app.run_reconciliation_tasks()
+        original = (await _list_pending_approvals(app))[0]
+
+        result = await app.resolve_approval.execute(
+            app.actor(),
+            original["approval_id"],
+            {"decision": "reject", "reason": "estimate is too high"},
+            original["revision"],
+            "trace-reject-effort",
+        )
+        assert result.status == CommandStatus.COMPLETED
+        await app.run_reconciliation_tasks()
+
+        pending = await _list_pending_approvals(app)
+        assert len(pending) == 1
+        assert pending[0]["request_type"] == "effort_confirmation"
+        assert pending[0]["approval_id"] != original["approval_id"]
+        assert pending[0]["payload"]["previous_rejection_reason"] == "estimate is too high"
+
+    async def test_initial_plan_rejection_returns_to_editable_effort(
+        self, app: Phase1App
+    ) -> None:
+        await app.seed_golden_observation()
+        await app.run_reconciliation_tasks()
+        effort = (await _list_pending_approvals(app))[0]
+        await _approve(app, effort, confirmed_minutes=180)
+        await app.run_reconciliation_tasks()
+        plan = (await _list_pending_approvals(app))[0]
+
+        result = await app.resolve_approval.execute(
+            app.actor(),
+            plan["approval_id"],
+            {"decision": "reject", "reason": "try another plan"},
+            plan["revision"],
+            "trace-reject-plan",
+        )
+        assert result.status == CommandStatus.COMPLETED
+        await app.run_reconciliation_tasks()
+
+        pending = await _list_pending_approvals(app)
+        assert len(pending) == 1
+        assert pending[0]["request_type"] == "effort_confirmation"
+        assert pending[0]["payload"]["previous_request_type"] == "initial_plan_approval"
+        planner_run = app.store["planner_runs"][plan["payload"]["planner_run_id"]]
+        assert planner_run["status"] == "stale"
+        assert planner_run["stale_reason"] == "user_rejected_initial_plan"
+
+    async def test_infeasible_effort_never_creates_a_plan_approval(
+        self, app: Phase1App
+    ) -> None:
+        await app.seed_golden_observation()
+        await app.run_reconciliation_tasks()
+        effort = (await _list_pending_approvals(app))[0]
+        await _approve(app, effort, confirmed_minutes=2400)
+        await app.run_reconciliation_tasks()
+
+        pending = await _list_pending_approvals(app)
+        assert len(pending) == 1
+        assert pending[0]["request_type"] == "effort_confirmation"
+        assert pending[0]["policy_reason"] == "portfolio_capacity_conflict"
+        assert not any(
+            row["request_type"] == "initial_plan_approval"
+            and row["status"] == "pending"
+            for row in app.store["approvals"].values()
+        )
+
+    async def test_effort_must_match_the_planner_granularity(
+        self, app: Phase1App
+    ) -> None:
+        await app.seed_golden_observation()
+        await app.run_reconciliation_tasks()
+        effort = (await _list_pending_approvals(app))[0]
+
+        with pytest.raises(ValueError, match="15-minute increments"):
+            await _approve(app, effort, confirmed_minutes=16)
+
     async def test_approval_survives_process_restart(self, app: Phase1App) -> None:
         await app.seed_golden_observation()
         await app.run_reconciliation_tasks()

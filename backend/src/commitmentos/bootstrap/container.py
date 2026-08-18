@@ -35,6 +35,7 @@ from commitmentos.application.services.outbox_dispatcher import OutboxDispatcher
 from commitmentos.application.services.planning_inputs import PlanningInputReader
 from commitmentos.application.services.portfolio_planning import PortfolioPlanningService
 from commitmentos.application.services.source_sync_dispatcher import SourceSyncDispatcher
+from commitmentos.bootstrap.gemini_boundary import build_gemini_interpreters
 from commitmentos.bootstrap.settings import Settings
 from commitmentos.contracts.observations import ObservationFactory
 from commitmentos.contracts.tasks import TaskNameFactory
@@ -52,7 +53,6 @@ from commitmentos.infrastructure.firestore.unit_of_work import FirestoreUnitOfWo
 from commitmentos.infrastructure.google.calendar_reader import GoogleCalendarReader
 from commitmentos.infrastructure.google.calendar_writer import GoogleCalendarWriter
 from commitmentos.infrastructure.google.credentials import ControlledCredentialsProvider
-from commitmentos.infrastructure.google.gemini_interpreter import GeminiInterpreter
 from commitmentos.infrastructure.google.gmail_reader import GoogleGmailReader
 from commitmentos.infrastructure.google.oauth_client import GoogleOAuthClient
 from commitmentos.infrastructure.google.oidc_verifier import GoogleIdentityVerifier
@@ -215,14 +215,9 @@ class ApplicationContainer:
             settings.planner_version,
         )
         self._gmail_reader = GoogleGmailReader(self._credentials_provider)
-        self._model_interpreter = GeminiInterpreter(
-            client_factory=self._gemini_client,
-            model_id=settings.gemini_model_id,
-            prompt_version=settings.prompt_version,
-            schema_version=settings.extraction_schema_version,
-            thinking_level=settings.gemini_thinking_level,
-            controlled_display_name="Controlled User",
-        )
+        model_boundary = build_gemini_interpreters(settings)
+        self._model_interpreter = model_boundary.controlled_data
+        self._sandbox_model_interpreter = model_boundary.sandbox
         self._source_sync_dispatcher = SourceSyncDispatcher(
             self._unit_of_work,
             self._task_dispatcher,
@@ -243,17 +238,6 @@ class ApplicationContainer:
         # inner route object is what integration tests execute directly.
         self._workflow = AdkReconciliationWorkflow(inner_workflow)
         self._identity_verifier = GoogleIdentityVerifier()
-
-    def _gemini_client(self):  # noqa: ANN202 - lazy third-party client
-        from google import genai
-        from google.cloud import secretmanager
-
-        api_key = (
-            secretmanager.SecretManagerServiceClient()
-            .access_secret_version(name=self._settings.gemini_api_key_secret_ref)
-            .payload.data.decode("utf-8")
-        )
-        return genai.Client(api_key=api_key)
 
     def _calendar_channel_token(self) -> str:
         from google.cloud import secretmanager
@@ -502,13 +486,16 @@ class ApplicationContainer:
         return DemoRouter(StaticDemoReadModel(self._settings.demo_data_directory))
 
     def sandbox_router(self) -> SandboxRouter:
-        """The interactive sandbox, given the live interpreter and nothing else.
+        """The interactive sandbox, given its dedicated interpreter only.
 
-        Only the model interpreter crosses into the sandbox: every other port
-        it runs on is an in-memory twin, so the composition itself is the
-        isolation guarantee (see `commitmentos.sandbox`).
+        Its interpreter owns a sandbox-only client factory and API-key secret;
+        it is not the production interpreter and retains no container
+        reference. Every non-model port is an in-memory twin (see
+        `commitmentos.sandbox`).
         """
-        return SandboxRouter(SandboxSessionStore(live_interpreter=self._model_interpreter))
+        return SandboxRouter(
+            SandboxSessionStore(live_interpreter=self._sandbox_model_interpreter)
+        )
 
     def identity_dependencies(self) -> IdentityDependencies:
         settings = self._settings

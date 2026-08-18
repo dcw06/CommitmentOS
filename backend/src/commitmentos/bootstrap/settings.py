@@ -46,10 +46,16 @@ class Settings(BaseSettings):
     oauth_client_secret_ref: str
     controlled_refresh_token_secret_ref: str
     gemini_api_key_secret_ref: str
+    # The public sandbox must never consume the production interpreter's key
+    # or quota pool. Optional outside production so backend-only development
+    # and the recorded guided-card floor still work without cloud credentials.
+    sandbox_gemini_api_key_secret_ref: str | None = None
     oauth_publishing_mode: OAuthPublishingMode
     oauth_redirect_uri: AnyHttpUrl
     gemini_model_id: str
     gemini_thinking_level: str
+    gemini_request_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    sandbox_gemini_request_timeout_seconds: float = Field(default=20, gt=0, le=60)
     prompt_version: str
     extraction_schema_version: str
     task_schema_version: str
@@ -103,6 +109,16 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"production policy_version must be {REQUIRED_POLICY_VERSION}"
             )
+        sandbox_secret_ref = self.sandbox_gemini_api_key_secret_ref
+        if not sandbox_secret_ref:
+            raise ValueError(
+                "production sandbox_gemini_api_key_secret_ref must be configured"
+            )
+        if sandbox_secret_ref == self.gemini_api_key_secret_ref:
+            raise ValueError(
+                "production sandbox and controlled-data Gemini secret references "
+                "must be distinct"
+            )
         if not self.gmail_pubsub_topic.startswith(
             f"projects/{self.google_cloud_project}/topics/"
         ):
@@ -111,6 +127,7 @@ class Settings(BaseSettings):
             ("oauth_client_secret_ref", self.oauth_client_secret_ref),
             ("controlled_refresh_token_secret_ref", self.controlled_refresh_token_secret_ref),
             ("gemini_api_key_secret_ref", self.gemini_api_key_secret_ref),
+            ("sandbox_gemini_api_key_secret_ref", sandbox_secret_ref),
             ("calendar_channel_secret_ref", self.calendar_channel_secret_ref),
         ):
             if not reference.startswith(f"projects/{self.google_cloud_project}/secrets/"):

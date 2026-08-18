@@ -573,6 +573,7 @@ function idempotencyKey(prefix: string): string {
 export interface ApprovalDecision {
   decision: "approve" | "reject";
   confirmedMinutes?: number;
+  deadline?: string;
   ownershipType?: string;
   choice?: string;
   reason?: string;
@@ -589,6 +590,7 @@ export async function resolveApproval(
   if (decision.confirmedMinutes !== undefined) {
     body.confirmed_minutes = decision.confirmedMinutes;
   }
+  if (decision.deadline) body.deadline = decision.deadline;
   if (decision.ownershipType) body.ownership_type = decision.ownershipType;
   if (decision.choice) body.choice = decision.choice;
   if (decision.reason) body.reason = decision.reason;

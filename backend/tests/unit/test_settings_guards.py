@@ -8,6 +8,7 @@ from commitmentos.bootstrap.settings import RuntimeEnvironment, Settings
 def settings_for(environment: RuntimeEnvironment, base_url: str) -> Settings:
     project = "commitmentos-test"
     secret = f"projects/{project}/secrets/example/versions/latest"
+    sandbox_secret = f"projects/{project}/secrets/sandbox-example/versions/latest"
     return Settings.model_construct(
         environment=environment,
         controlled_user_id="controlled-01",
@@ -20,6 +21,7 @@ def settings_for(environment: RuntimeEnvironment, base_url: str) -> Settings:
         oauth_client_secret_ref=secret,
         controlled_refresh_token_secret_ref=secret,
         gemini_api_key_secret_ref=secret,
+        sandbox_gemini_api_key_secret_ref=sandbox_secret,
         calendar_channel_secret_ref=secret,
         policy_version="autonomy_policy_v2",
     )
@@ -44,4 +46,24 @@ def test_production_rejects_a_policy_pin_that_does_not_match_runtime_behavior() 
     )
     settings.policy_version = "autonomy_policy_v1"
     with pytest.raises(ValueError, match="autonomy_policy_v2"):
+        settings.validate_live_mode_guards()
+
+
+def test_production_requires_a_sandbox_specific_gemini_secret() -> None:
+    settings = settings_for(
+        RuntimeEnvironment.PRODUCTION,
+        "https://commitmentos.run.app",
+    )
+    settings.sandbox_gemini_api_key_secret_ref = None
+    with pytest.raises(ValueError, match="sandbox_gemini_api_key_secret_ref"):
+        settings.validate_live_mode_guards()
+
+
+def test_production_rejects_a_shared_sandbox_gemini_secret() -> None:
+    settings = settings_for(
+        RuntimeEnvironment.PRODUCTION,
+        "https://commitmentos.run.app",
+    )
+    settings.sandbox_gemini_api_key_secret_ref = settings.gemini_api_key_secret_ref
+    with pytest.raises(ValueError, match="must be distinct"):
         settings.validate_live_mode_guards()

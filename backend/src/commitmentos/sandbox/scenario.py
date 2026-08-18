@@ -1,10 +1,10 @@
-"""The canned thread a judge drives, plus its recorded interpretations.
+"""The guided thread a judge can drive, plus its recorded interpretations.
 
-Message text is fixed input, not free text: a public surface that fed
-arbitrary strings to the model would be both an unbounded cost and an open
-prompt-injection target. Each card carries a recorded interpretation used
-when live interpretation is unavailable, so the demonstration never dies on
-a model outage; `interpreter.py` prefers the live model and falls back here.
+Each guided card carries a recorded interpretation used when live
+interpretation is unavailable, so the authored demonstration never dies on a
+model outage; `interpreter.py` prefers the live model and falls back here.
+The separate free-play lane accepts bounded judge-authored text, but never
+uses these records as an answer to that text.
 
 Recorded quotes must remain exact substrings of the message bodies — the
 deterministic validator enforces that anchor on recorded and live output
@@ -21,6 +21,7 @@ PACIFIC = timezone(timedelta(hours=-7))
 
 THREAD_ID = "sandbox-thread-vendor-comparison"
 THREAD_SUBJECT = "Vendor comparison for the platform review"
+FREE_PLAY_THREAD_ID = "sandbox-thread-free-play"
 
 JORDAN = "Jordan Ellis <jordan@sandbox.invalid>"
 YOU = "You <you@sandbox.invalid>"
@@ -149,12 +150,15 @@ MESSAGE_THREE = MessageCard(
     kind="message",
     persona="jordan",
     sender=JORDAN,
-    label="Jordan moves the deadline earlier",
+    label="Jordan proposes an earlier deadline",
     body=(
         "Change of plan — the review got moved up a day. Any chance you could "
         "get it to me by Thursday instead?"
     ),
-    offset_minutes=210,
+    # Five minutes before the first planned block in the authored path. This
+    # keeps the later conflict prospective rather than retroactively placing a
+    # meeting over time that has already elapsed.
+    offset_minutes=100,
     recorded_wire=_wire(
         """{
           "ownership_type": "my_commitment",
@@ -180,11 +184,10 @@ MESSAGE_THREE = MessageCard(
         % _deadline(3, 17, 0)
     ),
     note=(
-        "The same commitment is revised, not duplicated — a new revision of "
-        "the one you already own. The agent re-checks the plan against the "
-        "tighter deadline and leaves the blocks where they are, because they "
-        "still finish in time. Stability is the point: it moves work only "
-        "when it must."
+        "Jordan can propose a tighter deadline, but cannot silently rewrite "
+        "the one you accepted. The agent holds Thursday for your explicit "
+        "decision; accepting it revises the same commitment rather than "
+        "creating a duplicate."
     ),
 )
 

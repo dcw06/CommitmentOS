@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Mapping
 
 from commitmentos.application.dto import AuthenticatedActor, CommandResult, CommandStatus
@@ -91,7 +92,10 @@ class ResolveApproval:
             commitment_id = str(approval.get("commitment_id") or "")
             if commitment_id:
                 commitment = await repositories.commitments.get(commitment_id)
-            if request_type != "identity_confirmation" and commitment is None:
+            if request_type not in {
+                "identity_confirmation",
+                "deadline_required_confirmation",
+            } and commitment is None:
                 return CommandResult(
                     status=CommandStatus.TERMINAL_FAILURE,
                     identifiers={"approval_id": approval_id},
@@ -159,6 +163,28 @@ class ResolveApproval:
                     error_code="confirmed_minutes_required",
                 )
             if (
+                request_type == "deadline_required_confirmation"
+                and decision["decision"] == "approve"
+                and "deadline" not in decision
+            ):
+                return CommandResult(
+                    status=CommandStatus.TERMINAL_FAILURE,
+                    identifiers={"approval_id": approval_id},
+                    revision=approval.get("revision"),
+                    error_code="deadline_required",
+                )
+            if (
+                request_type == "deadline_required_confirmation"
+                and decision["decision"] == "approve"
+                and datetime.fromisoformat(str(decision["deadline"])) <= now
+            ):
+                return CommandResult(
+                    status=CommandStatus.TERMINAL_FAILURE,
+                    identifiers={"approval_id": approval_id},
+                    revision=approval.get("revision"),
+                    error_code="deadline_must_be_future",
+                )
+            if (
                 request_type
                 in ("calendar_invalid_move_decision", "calendar_user_deleted_decision")
                 and decision["decision"] == "approve"
@@ -222,10 +248,28 @@ class ResolveApproval:
             await repositories.activity.append(
                 self._activity_factory.create(
                     user_id=actor.user_id,
-                    event_type=ActivityEventType.CONFIRMATION_RECORDED,
+                    event_type=(
+                        ActivityEventType.DEADLINE_CHANGE_CONFIRMATION
+                        if approval.get("request_type")
+                        == "deadline_change_confirmation"
+                        else (
+                            ActivityEventType.DEADLINE_REQUIRED_CONFIRMATION
+                            if approval.get("request_type")
+                            == "deadline_required_confirmation"
+                            else (
+                                ActivityEventType.RETRACTION_CONFIRMATION
+                                if approval.get("request_type")
+                                == "retraction_confirmation"
+                                else ActivityEventType.CONFIRMATION_RECORDED
+                            )
+                        )
+                    ),
                     trace_id=trace_id,
                     actor=actor.user_id,
-                    summary=f"{approval.get('request_type')} {decision['decision']}d",
+                    summary=(
+                        f"{approval.get('request_type')} "
+                        f"{'approved' if decision['decision'] == 'approve' else 'rejected'}"
+                    ),
                     payload={
                         "approval_id": approval_id,
                         "request_type": approval.get("request_type"),
@@ -286,8 +330,23 @@ class ResolveApproval:
             raise ValueError("decision must be one of approve or reject")
         if decision.get("decision") == "approve" and "confirmed_minutes" in decision:
             minutes = decision["confirmed_minutes"]
-            if not isinstance(minutes, int) or minutes <= 0:
-                raise ValueError("confirmed_minutes must be a positive integer")
+            if (
+                not isinstance(minutes, int)
+                or isinstance(minutes, bool)
+                or minutes < 30
+                or minutes > 2400
+                or minutes % 15 != 0
+            ):
+                raise ValueError(
+                    "confirmed_minutes must be 30–2400 in 15-minute increments"
+                )
+        if decision.get("decision") == "approve" and "deadline" in decision:
+            try:
+                deadline = datetime.fromisoformat(str(decision["deadline"]))
+            except ValueError as error:
+                raise ValueError("deadline must be an ISO-8601 datetime") from error
+            if deadline.tzinfo is None or deadline.utcoffset() is None:
+                raise ValueError("deadline must include a timezone")
         if "ownership_type" in decision:
             try:
                 OwnershipType(str(decision["ownership_type"]))

@@ -5,12 +5,13 @@ executor that serve the controlled user in production, but every port that
 would reach outside the process is the in-memory twin: Firestore is a dict,
 Gmail is a scripted mailbox, Calendar is a dict of events, Cloud Tasks is a
 list, and the clock is advanceable. Nothing here can read a live document or
-call a Google API — the composition simply has no credential to do it with.
+call a controlled-user Google API — the composition has no such credential.
 
 The one deliberately live edge is interpretation: the model interpreter is
-injected, so the deployed sandbox can hand it the real Gemini client (see
-`interpreter.py`, which caches per canned message so a public surface cannot
-issue unbounded model calls).
+injected, and production hands it a distinct sandbox-only Gemini client/key.
+Guided cards have a recorded availability floor; free-play calls are
+separately rate-limited and use no canned fallback (see `interpreter.py` and
+`session.py`).
 """
 
 from __future__ import annotations
@@ -281,17 +282,27 @@ class SandboxWorld:
         )
         await self.drain()
 
-    async def deliver_message(self, message_id: str, thread_id: str) -> str:
-        """Ingest one canned message the way a Gmail push would."""
+    async def deliver_message(
+        self,
+        message_id: str,
+        thread_id: str,
+        *,
+        producer_version: str = "sandbox-1",
+    ) -> str:
+        """Ingest one guided or judge-authored message as a Gmail push would."""
         observation = self.observation_factory.source_change(
             observation_type=ObservationType.GMAIL_MESSAGE_CHANGED,
             user_id=SANDBOX_USER,
             producer_id=f"{SANDBOX_USER}:{message_id}",
-            producer_version="sandbox-1",
+            producer_version=producer_version,
             source="gmail",
             external_id=message_id,
-            external_version="sandbox-1",
-            payload_hash=f"sandbox-{message_id}",
+            external_version=producer_version,
+            payload_hash=(
+                f"sandbox-{message_id}"
+                if producer_version == "sandbox-1"
+                else f"sandbox-{message_id}-{producer_version}"
+            ),
             source_reference={"thread_id": thread_id, "message_id": message_id},
             safe_metadata={},
             observed_at=self.clock.now(),

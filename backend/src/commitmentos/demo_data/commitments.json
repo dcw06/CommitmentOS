@@ -5,14 +5,14 @@
     "title": "Send revised proposal to Professor Chen",
     "ownership_type": "my_commitment",
     "beneficiary": "Professor Chen",
-    "lifecycle_status": "in_progress",
+    "lifecycle_status": "completed",
     "deadline": "Thursday 16:00",
     "deadline_source_expression": "bring the review forward to Thursday at 4 p.m.",
     "deadline_confidence": 0.93,
-    "risk_level": "on_track",
+    "risk_level": "unknown",
     "confirmed_minutes": 180,
     "verified_completed_minutes": 120,
-    "remaining_minutes": 60,
+    "remaining_minutes": null,
     "evidence_excerpts": [
       "Yes—I'll have it back before our Friday 4 p.m. review.",
       "Could we bring the review forward to Thursday at 4 p.m.?"
@@ -20,7 +20,7 @@
     "work_blocks": [
       {"day": "Tuesday", "start": "09:00", "end": "10:00", "execution_state": "completed", "verified_minutes": 60},
       {"day": "Wednesday", "start": "11:00", "end": "12:00", "execution_state": "completed", "verified_minutes": 60, "note": "moved by automatic repair after a meeting conflict"},
-      {"day": "Thursday", "start": "09:00", "end": "10:00", "execution_state": "awaiting_check_in", "verified_minutes": 0}
+      {"day": "Thursday", "start": "09:00", "end": "10:00", "execution_state": "missed", "verified_minutes": 0}
     ]
   },
   {

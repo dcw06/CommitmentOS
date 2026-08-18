@@ -23,7 +23,7 @@ This file orients any coding agent or new contributor. Read it before editing.
 - `docs/submission_assets/` — Devpost story, dashboard screenshots, social
   drafts.
 
-## Current state (2026-08-17)
+## Current state (2026-08-18)
 
 All build phases (0–6) are closed with live evidence. Deployed on Cloud Run
 (`us-west1`, project `commitmentos-505114`), serving the React dashboard at
@@ -39,7 +39,13 @@ there moves the tests too; and the sandbox is the only unauthenticated
 mutating surface, so its isolation properties are pinned by
 `backend/tests/contract/test_sandbox_contracts.py` and must not be loosened.
 Recorded interpretations in `sandbox/scenario.py` carry evidence quotes that
-must stay exact substrings of their message bodies.
+must stay exact substrings of their message bodies. Free-play text is limited
+to the two simulated identities and the caps in `sandbox/session.py`; it must
+never select one of those recorded interpretations as a fallback. Its only
+external capability is the sandbox-specific Gemini interpreter built in
+`bootstrap/gemini_boundary.py`; production must use a distinct sandbox key
+from a separate quota project, and the sandbox must never receive the
+controlled-data interpreter or a container-bound client factory.
 
 Measured evidence, preserved under `docs/phase5_evidence/`:
 
@@ -57,7 +63,7 @@ post and a build write-up.
 ## Verification commands
 
 ```bash
-.venv/bin/pytest                # full suite — 269 tests, must stay green
+.venv/bin/pytest                # full suite — 304 tests, must stay green
 .venv/bin/ruff check .          # must stay clean (repo enforces check, not format)
 cd frontend && npm run build    # tsc + vite; bundle served from frontend/dist
 ```
@@ -79,8 +85,9 @@ imports; do not chase them unless you touched the flagged files.
 3. **Don't jeopardize the verified state.** The deployed revision passed the
    full campaign; behavioral backend changes this close to submission need a
    rerun of the suite and a deliberate decision, not a drive-by refactor.
-4. **Deploys are owner-run:** `gcloud run deploy commitmentos --source .
-   --region us-west1` (agents should not deploy or shift traffic).
+4. **Deploys are owner-run:** `.venv/bin/python
+   scripts/deploy_commitmentos.py --deploy` (agents should not deploy or shift
+   traffic). This release gate enforces the sandbox's Cloud Run contract.
 5. `.env` is authoritative local config and has been corrupted by IDE buffer
    restores before — verify its contents before any deploy-related work.
 
@@ -100,13 +107,19 @@ resynchronization. Cloud Scheduler drives watch renewal, cursor catch-up,
 outbox/observation dispatch repair, and a once-a-minute safety reconciliation.
 Every decision lands on an audit timeline.
 
-## Post-audit source state (2026-08-17)
+## Post-audit source state (2026-08-18)
 
 The working source now contains a post-campaign hardening pass; see
 `docs/post_audit_hardening_progress.md`. It is newer than the deployed revision
 that produced `docs/phase5_evidence/`. Do not describe the hardening changes as
 live-verified until the owner reruns the deployment, golden campaign, and
 security probes and records a new evidence revision.
+
+The interactive sandbox also has a newer source-only judge-path hardening pass;
+see `docs/sandbox_hardening_progress.md`. It requires an owner deploy with Cloud
+Run session affinity, `maxScale=2`, and the separate sandbox Gemini secret
+before it is described as live. Use the owner-run release gate documented in
+the README; do not bypass its post-deploy checks.
 
 Remaining intentional scope gaps:
 

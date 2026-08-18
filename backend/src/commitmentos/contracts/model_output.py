@@ -110,7 +110,12 @@ class CommitmentProposalWireV2(BaseModel):
     deadline: DeadlineWireV2 | None = None
     proposed_effort_minutes: int | None = Field(default=None, ge=15, le=2400)
     identity_operation: Literal[
-        "create", "update_existing", "supersede", "ignore", "ambiguous"
+        "create",
+        "update_existing",
+        "supersede",
+        "cancel_existing",
+        "ignore",
+        "ambiguous",
     ]
     target_commitment_id: str | None = None
     evidence: list[EvidenceSpanWireV2] = Field(min_length=1, max_length=6)
@@ -388,7 +393,11 @@ class ModelOutputValidator:
             needs_confirmation = True
 
         operation = proposal.proposed_identity_operation
-        if operation in (IdentityOperation.UPDATE_EXISTING, IdentityOperation.SUPERSEDE):
+        if operation in (
+            IdentityOperation.UPDATE_EXISTING,
+            IdentityOperation.SUPERSEDE,
+            IdentityOperation.CANCEL_EXISTING,
+        ):
             if proposal.target_commitment_id is None:
                 errors.append("identity_target_missing")
             elif proposal.target_commitment_id not in allowed_target_commitment_ids:
