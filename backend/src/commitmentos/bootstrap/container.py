@@ -12,6 +12,7 @@ from commitmentos.api.routers.auth import AuthRouter
 from commitmentos.api.routers.calendar_webhook import CalendarWebhookRouter
 from commitmentos.api.routers.dashboard import DashboardRouter
 from commitmentos.api.routers.demo import DemoRouter
+from commitmentos.api.routers.sandbox import SandboxRouter
 from commitmentos.application.commands.change_commitment import ChangeCommitment
 from commitmentos.application.commands.change_system_control import ChangeSystemControl
 from commitmentos.application.commands.complete_commitment import CompleteCommitment
@@ -57,6 +58,7 @@ from commitmentos.infrastructure.google.oauth_client import GoogleOAuthClient
 from commitmentos.infrastructure.google.oidc_verifier import GoogleIdentityVerifier
 from commitmentos.infrastructure.messaging.cloud_tasks import CloudTasksDispatcher
 from commitmentos.infrastructure.static_demo import StaticDemoReadModel
+from commitmentos.sandbox.session import SandboxSessionStore
 from commitmentos.workflows.reconciliation.graph import AdkReconciliationWorkflow
 from commitmentos.workflows.reconciliation.phase1_workflow import DurableReconciliationWorkflow
 
@@ -498,6 +500,15 @@ class ApplicationContainer:
 
     def demo_router(self) -> DemoRouter:
         return DemoRouter(StaticDemoReadModel(self._settings.demo_data_directory))
+
+    def sandbox_router(self) -> SandboxRouter:
+        """The interactive sandbox, given the live interpreter and nothing else.
+
+        Only the model interpreter crosses into the sandbox: every other port
+        it runs on is an in-memory twin, so the composition itself is the
+        isolation guarantee (see `commitmentos.sandbox`).
+        """
+        return SandboxRouter(SandboxSessionStore(live_interpreter=self._model_interpreter))
 
     def identity_dependencies(self) -> IdentityDependencies:
         settings = self._settings

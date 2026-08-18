@@ -111,6 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # evidence record and the local watch-management scripts only.
     app.include_router(container.auth_router(identity).build())
     app.include_router(container.demo_router().build())
+    app.include_router(container.sandbox_router().build())
     _mount_dashboard(app)
     _assert_no_duplicate_routes(app)
     return app
@@ -147,6 +148,12 @@ def _mount_dashboard(app: FastAPI) -> None:
     @app.get("/demo", include_in_schema=False)
     @app.get("/demo/{rest:path}", include_in_schema=False)
     async def demo_spa(rest: str = "") -> FileResponse:
+        del rest
+        return FileResponse(index)
+
+    @app.get("/sandbox", include_in_schema=False)
+    @app.get("/sandbox/{rest:path}", include_in_schema=False)
+    async def sandbox_spa(rest: str = "") -> FileResponse:
         del rest
         return FileResponse(index)
 

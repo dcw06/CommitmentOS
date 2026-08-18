@@ -14,6 +14,7 @@ Contracts probed:
   oidc       every internal route group rejects wrong audience and wrong
              identity before any work (impersonated real tokens).
   demo       every production mutation method/path under /demo is rejected.
+  sandbox    the interactive sandbox is isolated, deck-bound, and leaks nothing.
   ratelimit  over-limit valid webhook signals return 429 (needs a live
              channel; skipped with a note if none is registered).
 
@@ -341,6 +342,100 @@ class SecurityDriver:
                 read = await client.get(f"{self.service_url}{path}")
                 check(f"{path} seeded read available", read.status_code == 200, "")
 
+    async def probe_sandbox(self) -> None:
+        """The interactive sandbox is unauthenticated by design — prove it is
+        also unreachable from anywhere else and unable to reach live data."""
+        async with httpx.AsyncClient(timeout=60) as client:
+            for path in ("/sandbox/api/state",):
+                anonymous = await client.get(f"{self.service_url}{path}")
+                check(
+                    f"GET {path} without a session rejected",
+                    anonymous.status_code == 409,
+                    f"HTTP {anonymous.status_code}",
+                )
+            forged = await client.get(
+                f"{self.service_url}/sandbox/api/state",
+                headers={"X-Sandbox-Session": "forged-session-id"},
+            )
+            check(
+                "forged sandbox session rejected",
+                forged.status_code == 409,
+                f"HTTP {forged.status_code}",
+            )
+
+            opened = await client.post(f"{self.service_url}/sandbox/api/session")
+            check(
+                "sandbox session can be opened",
+                opened.status_code == 201,
+                f"HTTP {opened.status_code}",
+            )
+            if opened.status_code != 201:
+                return
+            session_id = opened.json()["sessionId"]
+            headers = {"X-Sandbox-Session": session_id}
+
+            unknown = await client.post(
+                f"{self.service_url}/sandbox/api/cards/arbitrary_input", headers=headers
+            )
+            check(
+                "sandbox rejects cards outside the fixed deck",
+                unknown.status_code == 404,
+                f"HTTP {unknown.status_code}",
+            )
+            out_of_order = await client.post(
+                f"{self.service_url}/sandbox/api/cards/check_in", headers=headers
+            )
+            check(
+                "sandbox rejects a card the state does not allow",
+                out_of_order.status_code == 409,
+                f"HTTP {out_of_order.status_code}",
+            )
+
+            # A sandbox world must never surface controlled-account data: the
+            # only user it can name is its own.
+            state = await client.get(f"{self.service_url}/sandbox/api/state", headers=headers)
+            body = state.text
+            check(
+                "sandbox state carries no controlled identifiers",
+                self._controlled_email() not in body
+                and self.settings.controlled_user_id not in body,
+                "",
+            )
+            check(
+                "a fresh sandbox holds no commitments",
+                state.status_code == 200 and state.json()["commitments"] == [],
+                f"HTTP {state.status_code}",
+            )
+
+            # Sandbox sessions must be mutually invisible.
+            second = await client.post(f"{self.service_url}/sandbox/api/session")
+            if second.status_code == 201:
+                await client.post(
+                    f"{self.service_url}/sandbox/api/cards/msg_request", headers=headers
+                )
+                other = await client.get(
+                    f"{self.service_url}/sandbox/api/state",
+                    headers={"X-Sandbox-Session": second.json()["sessionId"]},
+                )
+                check(
+                    "one sandbox session cannot see another's state",
+                    other.status_code == 200 and other.json()["commitments"] == [],
+                    f"HTTP {other.status_code}",
+                )
+
+            # The read-only judge mode must stay mutation-free beside it.
+            leak = await client.post(
+                f"{self.service_url}/demo/api/today", json={"attempt": True}
+            )
+            check(
+                "sandbox does not open a mutation path under /demo",
+                leak.status_code == 403,
+                f"HTTP {leak.status_code}",
+            )
+
+    def _controlled_email(self) -> str:
+        return str(getattr(self.settings, "controlled_email", "")) or "\x00"
+
     async def probe_ratelimit(self) -> None:
         channels = await self._channels()
         if not channels:
@@ -380,6 +475,7 @@ async def _run(args: argparse.Namespace) -> int:
         "csrf": driver.probe_csrf,
         "oidc": driver.probe_oidc,
         "demo": driver.probe_demo,
+        "sandbox": driver.probe_sandbox,
         "ratelimit": driver.probe_ratelimit,
     }
     selected = list(groups) if args.command == "all" else [args.command]
@@ -406,7 +502,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--service-url", default=None)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("all", "session", "csrf", "oidc", "demo", "ratelimit"):
+    for name in ("all", "session", "csrf", "oidc", "demo", "sandbox", "ratelimit"):
         sub.add_parser(name)
     return asyncio.run(_run(parser.parse_args()))
 

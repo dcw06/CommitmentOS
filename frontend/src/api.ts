@@ -7,8 +7,13 @@
 //                   static /demo endpoints and every mutation control is
 //                   hidden (the server rejects demo mutations regardless).
 
+//  - sandbox (/sandbox): the interactive judge sandbox; the whole stack runs
+//                   over an isolated in-memory twin per session, addressed by
+//                   an explicit session header rather than a cookie.
+
 export const DEMO_MODE = window.location.pathname.startsWith("/demo");
-export const BASENAME = DEMO_MODE ? "/demo" : "/app";
+export const SANDBOX_MODE = window.location.pathname.startsWith("/sandbox");
+export const BASENAME = SANDBOX_MODE ? "/sandbox" : DEMO_MODE ? "/demo" : "/app";
 
 const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 

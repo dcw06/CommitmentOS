@@ -16,10 +16,12 @@ import {
   DEMO_MODE,
   fetchSystemStatus,
   logout,
+  SANDBOX_MODE,
 } from "./api";
 import { Badge, usePolling } from "./ui";
 import { ActivityPage } from "./views/activity";
 import { CommitmentDetailPage, CommitmentsPage } from "./views/commitments";
+import { SandboxPage } from "./views/sandbox";
 import { TodayPage } from "./views/today";
 
 function LiveControlStatus() {
@@ -32,6 +34,33 @@ function LiveControlStatus() {
       <span>Actions</span><Badge value={data.automaticActionMode} />
       <span>{data.heldActions} held · {data.inFlightActions} in flight</span>
     </div>
+  );
+}
+
+/** The sandbox is its own surface: no session to bootstrap, no live nav, and
+ *  a layout built around driving the scenario rather than reading a
+ *  dashboard. */
+function SandboxShell() {
+  return (
+    <>
+      <div className="demo-banner sandbox-banner">
+        <strong>Interactive sandbox</strong> — the real agent running on a
+        simulated inbox and calendar that exist only in your session. No Google
+        account, no live data, nothing you do here leaves it.
+      </div>
+      <header className="shell-header">
+        <div className="brand">
+          Commitment<span>OS</span>
+        </div>
+        <div className="shell-spacer" />
+        <div className="shell-status">
+          <a href="/demo">See the dashboard →</a>
+        </div>
+      </header>
+      <main>
+        <SandboxPage />
+      </main>
+    </>
   );
 }
 
@@ -57,7 +86,7 @@ function Shell() {
         <div className="demo-banner">
           <strong>Seeded judge mode</strong> — read-only demonstration data derived
           from a fixed scenario; no live mailbox content and no mutation
-          capability.
+          capability. <a href="/sandbox">Want to drive it yourself? →</a>
         </div>
       )}
       <header className="shell-header">
@@ -97,7 +126,7 @@ function Shell() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter basename={BASENAME}>
-      <Shell />
+      {SANDBOX_MODE ? <SandboxShell /> : <Shell />}
     </BrowserRouter>
   </StrictMode>,
 );

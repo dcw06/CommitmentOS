@@ -72,6 +72,7 @@ and action results continue through new durable observations.
 | `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | Google-signed OIDC: exact audience + per-group service-account identity; Gmail change signals are durably rate-limited |
 | Calendar webhook | High-entropy channel token (constant-time hash compare) + channel/resource mapping + active overlap status + stored expiry + durable per-channel rate limit |
 | `/demo` | Read-only seeded judge mode; static data, no Firestore/credential path, every mutation method rejected |
+| `/sandbox` | Interactive judge sandbox; unauthenticated by design, but composed entirely of in-memory twins — no credential, Firestore client, or controlled-user document is reachable from it. Session addressed by explicit header (no ambient authority), inputs restricted to a fixed card deck, and concurrent worlds, idle lifetime, and per-session actions all capped |
 
 ### Stack
 
@@ -86,8 +87,31 @@ and action results continue through new durable observations.
 
 ## Judge mode
 
-The hosted service exposes **`/demo`** — the full dashboard rendering seeded
-data derived from a fixed demonstration scenario. It is read-only by
+Two zero-login surfaces, neither of which touches live data.
+
+**`/sandbox` — drive it yourself.** A simulated email thread you play both
+sides of. Send the request, accept it, move the deadline, drop a meeting on
+top of a reserved block, let time pass, log your verified minutes — and watch
+the agent extract, converge, plan, repair, and refuse to inflate progress in
+response. Everything on the right-hand side is produced by the production
+stack: the same interpreter, identity resolver, portfolio planner, policy
+engine, executor, and audit timeline that serve the controlled user. What is
+simulated is the world around it — Firestore is a dict, Gmail is a scripted
+mailbox, Calendar is an in-memory store with Google's etag and
+cancelled-event semantics, Cloud Tasks is a list, and the clock is
+advanceable. Each visitor gets a private world; sessions cannot see each
+other and expire when idle.
+
+Interpretation is the one deliberately live edge. Because the deck is fixed,
+the first call for a given message is real Gemini output and is then cached
+for the process; if the model is unavailable the sandbox falls back to a
+recorded interpretation and labels which path produced it, so a judge is
+never shown model output that did not happen. The deterministic validator is
+unchanged on both paths — evidence quotes must be exact substrings of the
+source message.
+
+**`/demo` — read the dashboard.** The full dashboard rendering seeded data
+derived from a fixed demonstration scenario. It is read-only by
 construction: the demo read model has no Firestore, credential, or Google
 API access path, and every mutation method under `/demo` is rejected before
 any handler logic. No login required.
@@ -97,6 +121,10 @@ any handler logic. No login required.
 ```
 backend/src/commitmentos/   the service: api/ application/ domain/
                             infrastructure/ workflows/ contracts/ bootstrap/
+             .../sandbox/    the interactive judge sandbox: the in-memory twin
+                            (twin.py), one isolated world composing the real
+                            stack over it (world.py), the fixed card deck and
+                            its recorded interpretations (scenario.py)
 backend/tests/              unit + integration + contract suites over an
                             in-memory Firestore twin (production repo code
                             runs unmodified against it)
@@ -104,6 +132,8 @@ tests/fault_injection/      §16.4 fault matrix (worker kill, lease takeover,
                             executor death, projection corruption)
 tests/golden_path/          local rehearsal of the golden campaign
 frontend/                   React dashboard (Today / Commitments / Activity)
+                            plus the sandbox view; one bundle serves /app,
+                            /demo, and /sandbox
 scripts/                    gate drivers, golden campaign, security probes,
                             eval runner, ops helpers
 docs/                       phase progress, evidence packs, measured results
@@ -246,6 +276,14 @@ documents from `backend/src/commitmentos/demo_data/` through a read-only model
 with no Firestore or Google credential adapter, so every request starts from
 the same data and mutations are impossible.
 
+`/sandbox` needs no seed or reset either: each session builds its own world in
+memory and drops it on idle expiry or instance recycle, so "reset" is just a
+new session. The sandbox's behavior is pinned by
+`backend/tests/integration/test_sandbox_flow.py` (the story must extract,
+converge onto one commitment, plan, repair a conflict, and verify honest
+minutes) and `backend/tests/contract/test_sandbox_contracts.py` (isolation,
+deck-bound input, caps, and route precedence).
+
 For an end-to-end seed against the deployed service and real Calendar, use the
 audited live driver. Its generated run tag scopes cleanup:
 
@@ -331,7 +369,9 @@ replace or extend those records.
   `docs/phase2_evidence/`.
 - **Live security probes:** session negative matrix, CSRF on every mutation
   route, wrong OIDC audience/identity on all three internal groups, the
-  full `/demo` mutation matrix — all green against the deployed revision.
+  full `/demo` mutation matrix, and the `/sandbox` isolation matrix (no
+  session, forged session, off-deck input, cross-session visibility, and
+  controlled-identifier leakage) — all green against the deployed revision.
 - **Fault injection (§16.4):** worker kill + fenced-lease takeover, executor
   death before/after the Calendar response, create-before-record crash
   convergence, projection corruption blocking stale execution.
@@ -351,6 +391,12 @@ replace or extend those records.
 - The executor mutates only events carrying CommitmentOS ownership
   properties, and patch/cancel always sends `If-Match`; a 412 can only mark
   intent stale and trigger resynchronization.
+- The interactive sandbox is unauthenticated, so its safety is structural
+  rather than procedural: it is composed only of in-memory twins and holds no
+  credential or live client, its session id travels in an explicit header
+  rather than a cookie (nothing the browser sends automatically carries
+  authority there), and it accepts only card ids from a fixed deck, so no
+  free text ever reaches the model.
 
 ## Known limitations
 

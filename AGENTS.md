@@ -27,8 +27,19 @@ This file orients any coding agent or new contributor. Read it before editing.
 
 All build phases (0–6) are closed with live evidence. Deployed on Cloud Run
 (`us-west1`, project `commitmentos-505114`), serving the React dashboard at
-`/app` (controlled-user OAuth session) and a read-only seeded judge mode at
-`/demo` (no login, no mutation capability).
+`/app` (controlled-user OAuth session), a read-only seeded judge mode at
+`/demo` (no login, no mutation capability), and an interactive judge sandbox
+at `/sandbox`.
+
+The sandbox (`backend/src/commitmentos/sandbox/`) runs the real command stack
+over an in-memory twin, one isolated world per visitor. Two rules matter when
+editing it: the twin in `sandbox/twin.py` is shared with the whole backend
+test suite (`backend/tests/fakes.py` re-exports it), so a behavior change
+there moves the tests too; and the sandbox is the only unauthenticated
+mutating surface, so its isolation properties are pinned by
+`backend/tests/contract/test_sandbox_contracts.py` and must not be loosened.
+Recorded interpretations in `sandbox/scenario.py` carry evidence quotes that
+must stay exact substrings of their message bodies.
 
 Measured evidence, preserved under `docs/phase5_evidence/`:
 
@@ -46,7 +57,7 @@ post and a build write-up.
 ## Verification commands
 
 ```bash
-.venv/bin/pytest                # full suite — 254 tests, must stay green
+.venv/bin/pytest                # full suite — 269 tests, must stay green
 .venv/bin/ruff check .          # must stay clean (repo enforces check, not format)
 cd frontend && npm run build    # tsc + vite; bundle served from frontend/dist
 ```
