@@ -23,16 +23,33 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
+// Dates are rendered with an explicit weekday, date, and timezone so a
+// deadline and the blocks scheduled against it can never look out of order.
 const timeFormat = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
+  hour: "numeric",
   minute: "2-digit",
 });
-const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
+const dateFormat = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
   month: "short",
   day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
 });
+const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZoneName: "short",
+});
+
+function zoneAbbr(date: Date): string {
+  const parts = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    timeZoneName: "short",
+  }).formatToParts(date);
+  return parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+}
 
 export function formatTime(iso: string): string {
   const parsed = new Date(iso);
@@ -43,6 +60,20 @@ export function formatDateTime(iso: string | null): string {
   if (!iso) return "";
   const parsed = new Date(iso);
   return Number.isNaN(parsed.getTime()) ? iso : dateTimeFormat.format(parsed);
+}
+
+/** "Tue, Sep 15, 9:00 AM – 10:00 AM PDT" (end date appended if it differs). */
+export function formatRange(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return `${startIso}–${endIso}`;
+  }
+  const sameDay = dateFormat.format(start) === dateFormat.format(end);
+  const endLabel = sameDay
+    ? timeFormat.format(end)
+    : `${dateFormat.format(end)}, ${timeFormat.format(end)}`;
+  return `${dateFormat.format(start)}, ${timeFormat.format(start)} – ${endLabel} ${zoneAbbr(end)}`.trim();
 }
 
 export function minutesLabel(minutes: number | null): string {

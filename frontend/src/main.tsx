@@ -44,11 +44,12 @@ function SandboxShell() {
   return (
     <>
       <div className="demo-banner sandbox-banner">
-        <strong>Interactive sandbox</strong> — the real agent running on a
-        simulated inbox and calendar that exist only in your session. No Google
-        account or controlled-user data is used. Free-play text is sent to a
-        sandbox-only Gemini key for live interpretation, held in this process
-        until reset/expiry, and never written to Firestore or shared caches.
+        <strong>Interactive sandbox</strong> — real reconciliation and policy
+        code running against session-scoped inbox, calendar, and persistence
+        adapters. No Google account or controlled-user data is used. Free-play
+        text is sent to a sandbox-only Gemini key for live interpretation, held
+        in this process until reset/expiry, and never written to Firestore or
+        shared caches.
       </div>
       <header className="shell-header">
         <div className="brand">

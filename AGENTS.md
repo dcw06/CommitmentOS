@@ -63,7 +63,7 @@ post and a build write-up.
 ## Verification commands
 
 ```bash
-.venv/bin/pytest                # full suite — 304 tests, must stay green
+.venv/bin/pytest                # full suite — 321 tests, must stay green
 .venv/bin/ruff check .          # must stay clean (repo enforces check, not format)
 cd frontend && npm run build    # tsc + vite; bundle served from frontend/dist
 ```

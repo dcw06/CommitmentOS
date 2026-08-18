@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { ActivityItem, fetchActivity } from "../api";
+import { ActivityItem, DEMO_MODE, fetchActivity } from "../api";
 import { Card, Empty, formatDateTime, usePolling } from "../ui";
 
 function ActivityPayload({ item }: { item: ActivityItem }) {
@@ -68,7 +68,10 @@ function ActivityPayload({ item }: { item: ActivityItem }) {
         </div>
       )}
       <details>
-        <summary>Audit payload{item.traceId ? ` · trace ${item.traceId}` : ""}</summary>
+        <summary>
+          {DEMO_MODE ? "Seeded demonstration evidence" : "Recorded execution evidence"}
+          {item.traceId ? ` · trace ${item.traceId}` : ""}
+        </summary>
         <pre>{JSON.stringify(payload, null, 2)}</pre>
       </details>
     </div>
@@ -110,7 +113,11 @@ export function ActivityPage() {
   return (
     <Card
       title="Activity"
-      note="The decision timeline: every observation, interpretation, policy decision, outbox write, executor result, and control change."
+      note={
+        DEMO_MODE
+          ? "The decision timeline, seeded from the fixed demonstration scenario. Expanded payloads are authored seeded evidence — for genuine per-action execution evidence, drive the interactive sandbox."
+          : "The decision timeline: every observation, interpretation, policy decision, outbox write, executor result, and control change."
+      }
     >
       <div className="timeline">
         {items.length === 0 && <Empty>No activity recorded yet.</Empty>}

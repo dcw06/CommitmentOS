@@ -364,7 +364,7 @@ class SandboxRouter:
         async with session.lock:
             self._ensure_current(session_id, session)
             try:
-                await engine.resolve_approval(
+                outcome = await engine.resolve_approval(
                     session,
                     approval_id,
                     body.model_dump(exclude_none=True),
@@ -372,7 +372,14 @@ class SandboxRouter:
             except engine.SandboxCardError as error:
                 raise HTTPException(status_code=409, detail=str(error)) from None
             self._sessions.touch(session)
-            return JSONResponse(await engine.render(session))
+            payload: dict[str, Any] = await engine.render(session)
+            if outcome is not None:
+                payload["outcome"] = {
+                    "cardId": outcome.card_id,
+                    "headline": outcome.headline,
+                    "detail": outcome.detail,
+                }
+            return JSONResponse(payload)
 
     async def complete(self, session_id: str, commitment_id: str) -> JSONResponse:
         session = self._require(session_id)

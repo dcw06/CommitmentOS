@@ -401,12 +401,14 @@ async def resolve_approval(
     session: SandboxSession,
     approval_id: str,
     decision: Mapping[str, Any],
-) -> None:
+) -> CardOutcome | None:
     world = session.world
     pending = await _pending_approvals(world)
     match = next((row for row in pending if row["approval_id"] == approval_id), None)
     if match is None:
         raise SandboxCardError("approval is no longer pending")
+    request_type = str(match.get("request_type") or "")
+    plan_before = _plan_layout(world)
     payload = dict(decision)
     result = await world.resolve_approval.execute(
         world.actor(),
@@ -423,6 +425,56 @@ async def resolve_approval(
     # guard, but a confusing detour in a demonstration. Executor-triggered
     # syncs still run inside drain, after the plan is committed.
     await world.drain()
+    return _deadline_resolution_outcome(
+        world,
+        request_type,
+        str(payload.get("decision") or ""),
+        plan_before,
+    )
+
+
+def _plan_layout(world: SandboxWorld) -> dict[str, tuple[Any, Any]]:
+    return {
+        block_id: (row["scheduled_start"], row["scheduled_end"])
+        for block_id, row in _blocks(world)
+        if row["execution_state"] in {"planned", "active", "awaiting_check_in"}
+    }
+
+
+def _deadline_resolution_outcome(
+    world: SandboxWorld,
+    request_type: str,
+    decision: str,
+    plan_before: Mapping[str, tuple[Any, Any]],
+) -> CardOutcome | None:
+    """Narrate what accepting a deadline did to the plan — including nothing.
+
+    A preserved plan after a deadline change is minimal-change behavior worth
+    stating out loud, not silence a judge has to interpret.
+    """
+    if request_type != "deadline_change_confirmation" or decision != "approve":
+        return None
+    plan_after = _plan_layout(world)
+    if not plan_before and not plan_after:
+        return None
+    if plan_after == dict(plan_before):
+        return CardOutcome(
+            "deadline_change_confirmation",
+            "Deadline accepted; the existing plan was preserved",
+            (
+                "Deadline accepted. Feasibility was recalculated; all existing "
+                "blocks remained valid, so the plan was preserved unchanged."
+            ),
+        )
+    return CardOutcome(
+        "deadline_change_confirmation",
+        "Deadline accepted; the plan was revised",
+        (
+            "Deadline accepted. Feasibility was recalculated against the new "
+            "deadline and the existing plan no longer fit, so the calendar "
+            "shows the revised blocks."
+        ),
+    )
 
 
 async def complete_commitment(session: SandboxSession, commitment_id: str) -> None:
@@ -726,6 +778,7 @@ def _commitments_view(world: SandboxWorld) -> list[dict[str, Any]]:
                 "title": document["title"],
                 "ownershipType": document["ownership_type"],
                 "lifecycleStatus": document["lifecycle_status"],
+                "pendingStage": _pending_stage(world, commitment_id, document),
                 "revision": document["revision"],
                 "deadline": _iso(deadline.get("value")),
                 "deadlineExpression": deadline.get("source_expression"),
@@ -745,6 +798,34 @@ def _commitments_view(world: SandboxWorld) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _pending_stage(
+    world: SandboxWorld,
+    commitment_id: str,
+    document: Mapping[str, Any],
+) -> str | None:
+    """Say which confirmation an awaiting commitment is actually waiting on.
+
+    "Awaiting confirmation" covers two different boundaries — the effort
+    number and the first calendar write. The distinction is real state (two
+    approval types), so surface it instead of one umbrella label.
+    """
+    if document.get("lifecycle_status") != "awaiting_confirmation":
+        return None
+    stages = {
+        "effort_confirmation": "awaiting_effort_confirmation",
+        "initial_plan_approval": "awaiting_plan_approval",
+    }
+    for approval in world.store.get("approvals", {}).values():
+        if approval.get("commitment_id") != commitment_id:
+            continue
+        if approval.get("status") != "pending":
+            continue
+        stage = stages.get(str(approval.get("request_type")))
+        if stage is not None:
+            return stage
+    return None
 
 
 def _evidence_view(
@@ -898,9 +979,85 @@ def _activity_view(world: SandboxWorld) -> list[dict[str, Any]]:
             "eventType": row["event_type"],
             "summary": row.get("summary", ""),
             "createdAt": _iso(row["created_at"]),
+            "actor": row.get("actor"),
+            "correlationId": row.get("trace_id"),
+            "evidence": _evidence_projection(world, row),
         }
         for row in events
     ][-40:]
+
+
+# The audit evidence projection. Every field a judge can expand is copied
+# key-by-key from this explicit allowlist — the raw payload is never spread
+# into the response, so evidence excerpts, model input/output, headers, and
+# provider response bodies are excluded by construction, not by filtering.
+_EVIDENCE_PAYLOAD_FIELDS: tuple[tuple[str, str], ...] = (
+    ("observation_id", "observationId"),
+    ("source_observation_id", "sourceObservationId"),
+    ("commitment_revision", "commitmentRevision"),
+    ("plan_revision", "planRevision"),
+    ("policy_reason", "policyReason"),
+    ("calendar_event_id", "stableEventId"),
+    ("work_block_id", "workBlockId"),
+    ("execution_status", "outboxStatus"),
+    ("moved_block_count", "movedBlockCount"),
+    ("repair_latency_ms", "repairLatencyMs"),
+    ("decision_latency_ms", "decisionLatencyMs"),
+)
+
+_EVIDENCE_ACTION_LIMIT = 6
+
+
+def _evidence_projection(
+    world: SandboxWorld, row: Mapping[str, Any]
+) -> dict[str, Any]:
+    payload = row.get("payload") or {}
+    evidence: dict[str, Any] = {}
+    for source_key, target_key in _EVIDENCE_PAYLOAD_FIELDS:
+        value = payload.get(source_key)
+        if value is not None and target_key not in evidence:
+            evidence[target_key] = value
+    preserved = payload.get("preserved_work_block_ids")
+    if isinstance(preserved, (list, tuple)):
+        evidence["preservedBlockCount"] = len(preserved)
+    planner_run_id = payload.get("planner_run_id")
+    if planner_run_id:
+        evidence["plannerRunId"] = str(planner_run_id)
+        run = world.store.get("planner_runs", {}).get(str(planner_run_id))
+        if run is not None and run.get("planner_version"):
+            evidence["plannerVersion"] = str(run["planner_version"])
+    actions = _outbox_evidence(world, payload)
+    if actions:
+        evidence["outboxActions"] = actions
+    return evidence
+
+
+def _outbox_evidence(
+    world: SandboxWorld, payload: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    outbox_ids = payload.get("outbox_ids")
+    if not isinstance(outbox_ids, (list, tuple)):
+        outbox_ids = [payload["outbox_id"]] if payload.get("outbox_id") else []
+    actions: list[dict[str, Any]] = []
+    for outbox_id in list(outbox_ids)[:_EVIDENCE_ACTION_LIMIT]:
+        document = world.store.get("action_outbox", {}).get(str(outbox_id))
+        if document is None:
+            continue
+        mutation = document.get("mutation") or {}
+        response = document.get("mutation_response") or {}
+        action = {
+            "outboxId": str(outbox_id),
+            "idempotencyKey": document.get("action_idempotency_key"),
+            "outboxStatus": document.get("execution_status"),
+            "actionType": mutation.get("action_type"),
+            "stableEventId": mutation.get("calendar_event_id"),
+            "expectedEtag": mutation.get("expected_observed_event_etag"),
+            "observedEtag": response.get("mutation_response_etag"),
+        }
+        actions.append(
+            {key: value for key, value in action.items() if value is not None}
+        )
+    return actions
 
 
 # ----------------------------------------------------------------------

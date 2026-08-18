@@ -14,7 +14,7 @@ import {
   Card,
   Empty,
   formatDateTime,
-  formatTime,
+  formatRange,
   minutesLabel,
   useAction,
   usePolling,
@@ -363,7 +363,7 @@ export function TodayPage() {
           {data.blocks.map((block) => (
             <div className="row" key={block.workBlockId}>
               <span className="time-range">
-                {DEMO_MODE ? `${block.start}–${block.end}` : `${formatTime(block.start)}–${formatTime(block.end)}`}
+                {DEMO_MODE ? `${block.start}–${block.end}` : formatRange(block.start, block.end)}
               </span>
               <div className="grow">
                 <div className="title">

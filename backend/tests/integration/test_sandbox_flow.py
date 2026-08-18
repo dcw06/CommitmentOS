@@ -8,6 +8,7 @@ reach a controlled-user credential or a durable document.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import datetime
 
@@ -870,3 +871,180 @@ class TestSandboxFlow:
             assert not hasattr(world.calendar_writer, attribute)
             assert not hasattr(world.gmail, attribute)
         assert world.store is not None and "commitments" not in world.store
+
+
+# The audit evidence projection is a contract: only these keys may ever leave
+# the sandbox. Adding a field must be a deliberate decision made here too, so
+# the allowlist is pinned independently of the engine's own constant.
+ALLOWED_EVENT_KEYS = {
+    "eventId",
+    "eventType",
+    "summary",
+    "createdAt",
+    "actor",
+    "correlationId",
+    "evidence",
+}
+ALLOWED_EVIDENCE_KEYS = {
+    "observationId",
+    "sourceObservationId",
+    "commitmentRevision",
+    "planRevision",
+    "policyReason",
+    "stableEventId",
+    "workBlockId",
+    "outboxStatus",
+    "movedBlockCount",
+    "preservedBlockCount",
+    "repairLatencyMs",
+    "decisionLatencyMs",
+    "plannerRunId",
+    "plannerVersion",
+    "outboxActions",
+}
+ALLOWED_ACTION_KEYS = {
+    "outboxId",
+    "idempotencyKey",
+    "outboxStatus",
+    "actionType",
+    "stableEventId",
+    "expectedEtag",
+    "observedEtag",
+}
+
+
+class TestAuditEvidenceProjection:
+    async def _driven_view(self, store: SandboxSessionStore) -> dict:  # noqa: ANN401
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+        await _approve(session, "initial_plan_approval")
+        await _play(session, "msg_deadline_change", store)
+        await _approve(session, "deadline_change_confirmation")
+        await _play(session, "event_conflict", store)
+        await _play(session, "advance_clock", store)
+        await _play(session, "check_in", store)
+        return await engine.render(session)
+
+    async def test_activity_exposes_only_allowlisted_evidence(
+        self, store
+    ) -> None:  # noqa: ANN001
+        view = await self._driven_view(store)
+        assert view["activity"], "the driven story produced no audit events"
+        for event in view["activity"]:
+            assert set(event) <= ALLOWED_EVENT_KEYS, event
+            assert event["correlationId"], "audit event without a correlation id"
+            assert set(event["evidence"]) <= ALLOWED_EVIDENCE_KEYS, event
+            for action in event["evidence"].get("outboxActions", []):
+                assert set(action) <= ALLOWED_ACTION_KEYS, action
+
+    async def test_projection_substantiates_the_architecture(
+        self, store
+    ) -> None:  # noqa: ANN001
+        view = await self._driven_view(store)
+        by_type: dict[str, list[dict]] = {}
+        for event in view["activity"]:
+            by_type.setdefault(event["eventType"], []).append(event)
+
+        repaired = by_type["plan_repaired"][0]["evidence"]
+        assert repaired["movedBlockCount"] == 1
+        assert repaired["preservedBlockCount"] >= 1
+        assert repaired["plannerRunId"]
+        assert repaired["plannerVersion"]
+
+        results = [event["evidence"] for event in by_type["calendar_action_result"]]
+        succeeded = [row for row in results if row.get("outboxStatus") == "succeeded"]
+        assert succeeded, "no successful calendar action recorded"
+        actions = [
+            action
+            for row in results
+            for action in row.get("outboxActions", [])
+        ]
+        assert any(action.get("idempotencyKey") for action in actions)
+        assert any(action.get("stableEventId") for action in actions)
+        assert any(action.get("observedEtag") for action in actions), (
+            "no mutation response etag surfaced"
+        )
+        assert any(action.get("expectedEtag") for action in actions), (
+            "no If-Match precondition etag surfaced"
+        )
+
+    async def test_activity_never_carries_message_bodies(
+        self, store
+    ) -> None:  # noqa: ANN001
+        view = await self._driven_view(store)
+        rendered = json.dumps(view["activity"])
+        for card in MESSAGES:
+            assert card.body not in rendered, (
+                f"message body of {card.card_id} leaked into activity evidence"
+            )
+
+    async def test_pending_stage_distinguishes_the_two_confirmations(
+        self, store
+    ) -> None:  # noqa: ANN001
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        view = await engine.render(session)
+        assert view["commitments"][0]["pendingStage"] == "awaiting_effort_confirmation"
+
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+        view = await engine.render(session)
+        assert view["commitments"][0]["pendingStage"] == "awaiting_plan_approval"
+
+        await _approve(session, "initial_plan_approval")
+        view = await engine.render(session)
+        assert view["commitments"][0]["pendingStage"] is None
+
+    async def test_accepted_deadline_with_preserved_plan_says_so(
+        self, store
+    ) -> None:  # noqa: ANN001
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+        await _approve(session, "initial_plan_approval")
+        await _play(session, "msg_deadline_change", store)
+        before = {
+            (row["workBlockId"], row["start"], row["end"])
+            for row in (await engine.render(session))["blocks"]
+        }
+        approval = next(
+            row
+            for row in (await engine.render(session))["approvals"]
+            if row["requestType"] == "deadline_change_confirmation"
+        )
+
+        outcome = await engine.resolve_approval(
+            session,
+            approval["approvalId"],
+            {"decision": "approve"},
+        )
+
+        after = {
+            (row["workBlockId"], row["start"], row["end"])
+            for row in (await engine.render(session))["blocks"]
+        }
+        assert after == before, "the guided deadline acceptance moved blocks"
+        assert outcome is not None, "preserved plan produced no narration"
+        assert outcome.headline == "Deadline accepted; the existing plan was preserved"
+        assert "the plan was preserved unchanged" in outcome.detail
+
+    async def test_rejected_approval_produces_no_deadline_narration(
+        self, store
+    ) -> None:  # noqa: ANN001
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        approval = next(
+            row
+            for row in (await engine.render(session))["approvals"]
+            if row["requestType"] == "effort_confirmation"
+        )
+        outcome = await engine.resolve_approval(
+            session,
+            approval["approvalId"],
+            {"decision": "approve", "confirmed_minutes": 180},
+        )
+        assert outcome is None

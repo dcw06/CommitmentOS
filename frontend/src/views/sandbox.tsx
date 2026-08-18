@@ -10,12 +10,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  SandboxActivity,
   SandboxApproval,
   SandboxApprovalDecision,
   SandboxBlock,
   SandboxCard,
   SandboxCommitment,
   SandboxError,
+  SandboxEvidenceProjection,
   SandboxOwnershipType,
   SandboxState,
   chooseSandboxMode,
@@ -26,10 +28,13 @@ import {
   resolveSandboxApproval,
   resumeSession,
   sendSandboxMessage,
+  scenarioDateTime,
   scenarioDay,
   scenarioHour,
   scenarioLocalDateTimeToIso,
+  scenarioRange,
   scenarioTime,
+  scenarioZoneAbbr,
 } from "../sandboxApi";
 import { Badge, minutesLabel } from "../ui";
 
@@ -95,6 +100,7 @@ interface TourStep {
   step: number;
   title: string;
   body: string;
+  link?: { href: string; label: string };
 }
 
 function tourStep(state: SandboxState): TourStep {
@@ -262,7 +268,13 @@ function tourStep(state: SandboxState): TourStep {
       "Extraction from real language, an explicit confirmation boundary, a " +
       "plan on your calendar, an autonomous repair when reality moved, and " +
       "honest progress. Reset to run it again, or open the dashboard to see " +
-      "the same system on seeded demonstration data.",
+      "the same system on seeded demonstration data. The production " +
+      "evidence this sandbox cannot show — replay, live security probes, " +
+      "measured repair latency — is indexed in the repository:",
+    link: {
+      href: "https://github.com/dcw06/CommitmentOS/blob/main/docs/proof_index.md",
+      label: "Measured proof index",
+    },
   };
 }
 
@@ -715,11 +727,11 @@ function CalendarPanel({ state }: { state: SandboxState }) {
                   key={entry.key}
                   className={`calendar-entry ${entry.kind}`}
                   style={{ top: `${top}%`, height: `${Math.max(height, 6)}%` }}
-                  title={`${entry.label} · ${scenarioTime(entry.start)}`}
+                  title={`${entry.label} · ${scenarioDay(entry.start)}, ${scenarioRange(entry.start, entry.end)}`}
                 >
                   <strong>{entry.label}</strong>
                   <span>
-                    {scenarioTime(entry.start)} · {entry.sub}
+                    {scenarioRange(entry.start, entry.end)} · {entry.sub}
                   </span>
                 </div>
               );
@@ -769,6 +781,135 @@ function interpretationLabel(source: string): string {
   return source.replaceAll("-", " ");
 }
 
+// Say what each provenance label means, so "live cached" cannot be mistaken
+// for a mock. The labels themselves stay truthful; this is only explanation.
+const INTERPRETATION_COPY: Record<string, string> = {
+  live:
+    "A real Gemini call interpreted the last message just now. Everything " +
+    "after interpretation is the deterministic workflow.",
+  "live-cached":
+    "A real Gemini interpretation previously produced and semantically " +
+    "validated for this card. The deterministic workflow runs fresh for " +
+    "every action.",
+  recorded:
+    "Live interpretation was unavailable, so the recorded interpretation " +
+    "for this fixed card was used. The deterministic workflow is identical " +
+    "on both paths.",
+  "recorded-fallback":
+    "The live model's output failed deterministic semantic validation for " +
+    "this fixed card, so the recorded interpretation was used and labeled.",
+  "recorded-cached":
+    "A recorded interpretation for this fixed card, reused from the guided " +
+    "cache because live interpretation was unavailable. The deterministic " +
+    "workflow runs fresh for every action.",
+  "recorded-fallback-cached":
+    "A recorded interpretation reused from the guided cache; the live " +
+    "model's earlier output for this card had failed deterministic semantic " +
+    "validation. The deterministic workflow runs fresh for every action.",
+  "custom-unavailable":
+    "Live interpretation was unavailable or rejected for your message. No " +
+    "canned result was substituted.",
+};
+
+// ---------------------------------------------------------------------------
+// Audit evidence: the allowlisted projection of what the real stack recorded
+// ---------------------------------------------------------------------------
+
+const EVIDENCE_FIELD_LABELS: [keyof SandboxEvidenceProjection, string][] = [
+  ["observationId", "observation id"],
+  ["sourceObservationId", "source observation id"],
+  ["commitmentRevision", "commitment revision"],
+  ["planRevision", "plan revision"],
+  ["policyReason", "policy reason"],
+  ["plannerRunId", "planner run"],
+  ["plannerVersion", "planner version"],
+  ["workBlockId", "work block id"],
+  ["stableEventId", "stable calendar event id"],
+  ["outboxStatus", "outbox status"],
+  ["movedBlockCount", "moved blocks"],
+  ["preservedBlockCount", "preserved blocks"],
+  ["repairLatencyMs", "repair latency (ms)"],
+  ["decisionLatencyMs", "decision latency (ms)"],
+];
+
+function ActivityEvidence({ event }: { event: SandboxActivity }) {
+  const evidence = event.evidence ?? {};
+  const fields = EVIDENCE_FIELD_LABELS.filter(
+    ([key]) => evidence[key] !== undefined && key !== "outboxActions",
+  );
+  const actions = evidence.outboxActions ?? [];
+  if (fields.length === 0 && actions.length === 0 && !event.correlationId) {
+    return null;
+  }
+  return (
+    <details className="sandbox-evidence-details">
+      <summary>session execution evidence</summary>
+      <dl>
+        {event.correlationId ? (
+          <div>
+            <dt>correlation id</dt>
+            <dd>{event.correlationId}</dd>
+          </div>
+        ) : null}
+        {event.actor ? (
+          <div>
+            <dt>actor</dt>
+            <dd>{event.actor}</dd>
+          </div>
+        ) : null}
+        {fields.map(([key, label]) => (
+          <div key={key}>
+            <dt>{label}</dt>
+            <dd>{String(evidence[key])}</dd>
+          </div>
+        ))}
+        <div>
+          <dt>recorded at</dt>
+          <dd>{event.createdAt}</dd>
+        </div>
+      </dl>
+      {actions.map((action) => (
+        <dl className="sandbox-outbox-action" key={action.outboxId}>
+          <div>
+            <dt>outbox action</dt>
+            <dd>
+              {action.actionType ?? "action"} · {action.outboxStatus ?? "recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt>outbox id</dt>
+            <dd>{action.outboxId}</dd>
+          </div>
+          {action.idempotencyKey ? (
+            <div>
+              <dt>idempotency key</dt>
+              <dd>{action.idempotencyKey}</dd>
+            </div>
+          ) : null}
+          {action.stableEventId ? (
+            <div>
+              <dt>stable calendar event id</dt>
+              <dd>{action.stableEventId}</dd>
+            </div>
+          ) : null}
+          {action.expectedEtag ? (
+            <div>
+              <dt>expected etag (If-Match)</dt>
+              <dd>{action.expectedEtag}</dd>
+            </div>
+          ) : null}
+          {action.observedEtag ? (
+            <div>
+              <dt>observed response etag</dt>
+              <dd>{action.observedEtag}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ))}
+    </details>
+  );
+}
+
 function CommitmentPanel({
   commitment,
   blocks,
@@ -798,14 +939,14 @@ function CommitmentPanel({
       <div className="sandbox-commitment-head">
         <h3>{commitment.title}</h3>
         <Badge value={commitment.ownershipType} />
-        <Badge value={commitment.lifecycleStatus} />
+        <Badge value={commitment.pendingStage ?? commitment.lifecycleStatus} />
         {commitment.riskLevel ? <Badge value={commitment.riskLevel} /> : null}
       </div>
       <dl>
         <div>
           <dt>Deadline</dt>
           <dd>
-            {commitment.deadline ? scenarioDay(commitment.deadline) : "—"}
+            {commitment.deadline ? scenarioDateTime(commitment.deadline) : "—"}
             {commitment.deadlineExpression ? (
               <em> from “{commitment.deadlineExpression}”</em>
             ) : null}
@@ -918,7 +1059,17 @@ export function SandboxPage() {
         <span className="sandbox-step">Step {tour.step}</span>
         <div>
           <h2>{tour.title}</h2>
-          <p>{tour.body}</p>
+          <p>
+            {tour.body}
+            {tour.link ? (
+              <>
+                {" "}
+                <a href={tour.link.href} target="_blank" rel="noreferrer">
+                  {tour.link.label} →
+                </a>
+              </>
+            ) : null}
+          </p>
         </div>
         <button type="button" onClick={() => void run(resetSession)} disabled={busy}>
           Start over
@@ -1040,9 +1191,15 @@ export function SandboxPage() {
         <section className="sandbox-right">
           <h2>The agent</h2>
           <p className="section-note">
-            Scenario time {scenarioTime(state.now)} · {scenarioDay(state.now)} ·
-            interpretation: {interpretationLabel(state.interpretationSource)}
+            Scenario time {scenarioTime(state.now)} {scenarioZoneAbbr(state.now)} ·{" "}
+            {scenarioDay(state.now)} · interpretation:{" "}
+            {interpretationLabel(state.interpretationSource)}
           </p>
+          {INTERPRETATION_COPY[state.interpretationSource] ? (
+            <p className="sandbox-interpretation-note">
+              {INTERPRETATION_COPY[state.interpretationSource]}
+            </p>
+          ) : null}
 
           {state.outcome ? (
             <div className="sandbox-outcome">
@@ -1083,16 +1240,25 @@ export function SandboxPage() {
           <h3>Your calendar <span className="sandbox-subtle">{blockSummary(state.blocks)}</span></h3>
           <CalendarPanel state={state} />
 
-          <h3>What the agent did</h3>
+          <h3>
+            What the agent did{" "}
+            <span className="sandbox-subtle">session execution evidence</span>
+          </h3>
+          <p className="section-note">
+            Each entry is a real audit event this session produced. Expand one
+            for the allowlisted execution evidence — revisions, policy reasons,
+            idempotency keys, stable event ids, and etags — projected from the
+            same audit and outbox documents the production stack writes.
+          </p>
           <ol className="sandbox-activity">
             {state.activity
               .slice()
               .reverse()
-              .slice(0, 12)
               .map((event) => (
                 <li key={event.eventId}>
                   <code>{event.eventType}</code>
                   <span>{event.summary}</span>
+                  <ActivityEvidence event={event} />
                 </li>
               ))}
           </ol>

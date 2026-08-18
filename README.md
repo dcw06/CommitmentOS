@@ -255,7 +255,8 @@ contracts guard every route. Deploys and traffic changes are owner-run.
 
 The app does not need to stay publicly live outside judging; it scales to
 zero. All measured evidence in `docs/` was produced against the deployed
-service.
+service. [`docs/proof_index.md`](docs/proof_index.md) indexes every claim —
+which revision it was measured on and which frozen evidence file records it.
 
 ### Source serialization, cursor recovery, and publication
 

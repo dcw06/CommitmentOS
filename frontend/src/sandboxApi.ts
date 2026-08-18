@@ -36,6 +36,7 @@ export interface SandboxCommitment {
   title: string;
   ownershipType: string;
   lifecycleStatus: string;
+  pendingStage: string | null;
   revision: number;
   deadline: string | null;
   deadlineExpression: string | null;
@@ -99,11 +100,45 @@ export interface SandboxApprovalDecision {
   reason?: string;
 }
 
+export interface SandboxOutboxEvidence {
+  outboxId: string;
+  idempotencyKey?: string;
+  outboxStatus?: string;
+  actionType?: string;
+  stableEventId?: string;
+  expectedEtag?: string;
+  observedEtag?: string;
+}
+
+// The allowlisted audit evidence projection. The backend copies these fields
+// key-by-key from real audit payloads and joined outbox/planner documents;
+// nothing else in a payload can appear here.
+export interface SandboxEvidenceProjection {
+  observationId?: string;
+  sourceObservationId?: string;
+  commitmentRevision?: number;
+  planRevision?: number | string;
+  policyReason?: string;
+  stableEventId?: string;
+  workBlockId?: string;
+  outboxStatus?: string;
+  movedBlockCount?: number;
+  preservedBlockCount?: number;
+  repairLatencyMs?: number;
+  decisionLatencyMs?: number;
+  plannerRunId?: string;
+  plannerVersion?: string;
+  outboxActions?: SandboxOutboxEvidence[];
+}
+
 export interface SandboxActivity {
   eventId: string;
   eventType: string;
   summary: string;
   createdAt: string;
+  actor: string | null;
+  correlationId: string | null;
+  evidence: SandboxEvidenceProjection;
 }
 
 export interface SandboxCalendarEvent {
@@ -320,6 +355,31 @@ export function scenarioTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+export function scenarioZoneAbbr(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SCENARIO_ZONE,
+    hour: "numeric",
+    timeZoneName: "short",
+  }).formatToParts(new Date(iso));
+  return parts.find((part) => part.type === "timeZoneName")?.value ?? "PT";
+}
+
+/** "9:00 – 10:00 AM PDT", collapsing a shared day period on the start. */
+export function scenarioRange(startIso: string, endIso: string): string {
+  const start = scenarioTime(startIso);
+  const end = scenarioTime(endIso);
+  const startPeriod = start.split(" ")[1];
+  const endPeriod = end.split(" ")[1];
+  const shortStart =
+    startPeriod && startPeriod === endPeriod ? start.split(" ")[0] : start;
+  return `${shortStart} – ${end} ${scenarioZoneAbbr(endIso)}`;
+}
+
+/** "Thu, Sep 17, 4:00 PM PDT" — full date, time, and timezone. */
+export function scenarioDateTime(iso: string): string {
+  return `${scenarioDay(iso)}, ${scenarioTime(iso)} ${scenarioZoneAbbr(iso)}`;
 }
 
 export function scenarioDay(iso: string): string {

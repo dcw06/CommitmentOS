@@ -17,6 +17,7 @@ import {
   Card,
   Empty,
   formatDateTime,
+  formatRange,
   minutesLabel,
   useAction,
   usePolling,
@@ -90,7 +91,7 @@ function CheckInRow({
       <span className="time-range">
         {DEMO_MODE
           ? block.scheduledStart
-          : `${formatDateTime(block.scheduledStart)}`}
+          : formatRange(block.scheduledStart, block.scheduledEnd)}
       </span>
       <div className="grow">
         <div className="sub">
