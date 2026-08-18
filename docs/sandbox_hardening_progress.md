@@ -1,7 +1,10 @@
 # Interactive sandbox hardening progress
 
 Date: 2026-08-18  
-Status: source-complete; local verification green; owner deploy pending
+Status: LIVE — deployed through the release gate; serving revision
+`commitmentos-00055-ks8` passed security probes 73/73 and the authored story
+with live Gemini (see `docs/judge_feedback_progress.md` §Live verification
+and `docs/sandbox_evidence/README.md`)
 
 This record covers the judge-path defects reproduced against the deployed
 `/sandbox` revision. It does not modify or extend any frozen evidence under

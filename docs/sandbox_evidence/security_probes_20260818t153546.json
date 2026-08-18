@@ -1,0 +1,380 @@
+{
+  "service_url": "https://commitmentos-2hscowvydq-uw.a.run.app",
+  "recorded_at": "2026-08-18T15:35:46.309827+00:00",
+  "groups": [
+    "session",
+    "csrf",
+    "oidc",
+    "demo",
+    "sandbox",
+    "ratelimit"
+  ],
+  "checkpoints": [
+    {
+      "label": "login rejects non-allowlisted target 'https://evil.example'",
+      "ok": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "label": "login rejects non-allowlisted target '//evil.example'",
+      "ok": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "label": "login rejects non-allowlisted target '/etc/passwd'",
+      "ok": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "label": "login to /app issues a 302 to Google",
+      "ok": true,
+      "detail": "HTTP 302"
+    },
+    {
+      "label": "callback without state is rejected",
+      "ok": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "label": "callback with an unknown/replayed state is rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "authenticated read without a session is 401",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "minted session authenticates",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "logout without CSRF is rejected and the session survives",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "session still valid after failed logout",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "logout with CSRF revokes the session",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "revoked session is rejected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "/api/v1/approvals/probe-approval/resolve rejects missing session",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "/api/v1/approvals/probe-approval/resolve rejects missing CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/approvals/probe-approval/resolve rejects invalid CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/controls/change rejects missing session",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "/api/v1/controls/change rejects missing CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/controls/change rejects invalid CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/work-blocks/probe-block/check-in rejects missing session",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "/api/v1/work-blocks/probe-block/check-in rejects missing CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/work-blocks/probe-block/check-in rejects invalid CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/plans/probe-plan/undo rejects missing session",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "/api/v1/plans/probe-plan/undo rejects missing CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/plans/probe-plan/undo rejects invalid CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/commitments/probe-commitment/complete rejects missing session",
+      "ok": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "label": "/api/v1/commitments/probe-commitment/complete rejects missing CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/api/v1/commitments/probe-commitment/complete rejects invalid CSRF",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "pubsub route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "pubsub route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "tasks route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "tasks route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "scheduler route rejects a valid token with the wrong audience",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "scheduler route rejects a valid token with the wrong identity",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "POST /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PUT /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "PATCH /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/approvals/probe-approval/resolve rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/controls/change rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/work-blocks/probe-block/check-in rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/plans/probe-plan/undo rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/api/v1/commitments/probe-commitment/complete rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "DELETE /demo/auth/logout rejected",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "/demo/api/today seeded read available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "/demo/api/commitments seeded read available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "/demo/api/activity seeded read available",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "GET /sandbox/api/state without a session rejected",
+      "ok": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "label": "forged sandbox session rejected",
+      "ok": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "label": "custom sandbox messages require a session",
+      "ok": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "label": "sandbox session can be opened",
+      "ok": true,
+      "detail": "HTTP 201"
+    },
+    {
+      "label": "sandbox rejects cards outside the fixed deck",
+      "ok": true,
+      "detail": "HTTP 404"
+    },
+    {
+      "label": "sandbox rejects caller-defined message identities",
+      "ok": true,
+      "detail": "HTTP 422"
+    },
+    {
+      "label": "sandbox rejects oversized custom messages before interpretation",
+      "ok": true,
+      "detail": "HTTP 422"
+    },
+    {
+      "label": "sandbox rejects a card the state does not allow",
+      "ok": true,
+      "detail": "HTTP 409"
+    },
+    {
+      "label": "sandbox state carries no controlled identifiers",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "label": "a fresh sandbox holds no commitments",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "one sandbox session cannot see another's state",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "label": "sandbox does not open a mutation path under /demo",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "label": "webhook rate-limit exceedance",
+      "ok": true,
+      "detail": "documented owner-run step; unit + restart-durability proven in backend/tests/contract/test_webhook_rate_limit.py"
+    }
+  ],
+  "passed": true
+}

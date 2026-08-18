@@ -109,17 +109,17 @@ Every decision lands on an audit timeline.
 
 ## Post-audit source state (2026-08-18)
 
-The working source now contains a post-campaign hardening pass; see
-`docs/post_audit_hardening_progress.md`. It is newer than the deployed revision
-that produced `docs/phase5_evidence/`. Do not describe the hardening changes as
-live-verified until the owner reruns the deployment, golden campaign, and
-security probes and records a new evidence revision.
-
-The interactive sandbox also has a newer source-only judge-path hardening pass;
-see `docs/sandbox_hardening_progress.md`. It requires an owner deploy with Cloud
-Run session affinity, `maxScale=2`, and the separate sandbox Gemini secret
-before it is described as live. Use the owner-run release gate documented in
-the README; do not bypass its post-deploy checks.
+The deployed revision `commitmentos-00055-ks8` (100% traffic, deployed via
+the release gate `scripts/deploy_commitmentos.py`) carries every committed
+pass: the post-audit hardening (`docs/post_audit_hardening_progress.md`,
+gate-verified on `commitmentos-00045-dwk` — `docs/post_hardening_evidence/`),
+the sandbox judge-path hardening (`docs/sandbox_hardening_progress.md`), and
+the judge-feedback pass (`docs/judge_feedback_progress.md`). The current
+revision is live-verified: security probes 73/73
+(`docs/sandbox_evidence/security_probes_20260818t153546.json`) and the full
+authored story via the API with live Gemini. `docs/proof_index.md` maps every
+measured claim to its revision and frozen evidence file. Deploys remain
+owner-run through the release gate; do not bypass its post-deploy checks.
 
 Remaining intentional scope gaps:
 

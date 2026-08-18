@@ -4,6 +4,35 @@ Live security probes recorded after the interactive judge sandbox
 (`/sandbox`) was deployed. Kept separate from `docs/phase5_evidence/` so the
 phase 5 pack keeps describing only the phase 5 golden campaign.
 
+## `security_probes_20260818t153546.json` — 73/73 green
+
+Recorded 2026-08-18T15:35Z against
+`https://commitmentos-2hscowvydq-uw.a.run.app`, serving revision
+`commitmentos-00055-ks8` at 100% traffic — the revision deployed through
+`scripts/deploy_commitmentos.py` carrying the sandbox hardening and
+judge-feedback passes.
+
+All six groups green: `session` (12), `csrf` (15), `oidc` (6), `demo` (27),
+`sandbox` (12), `ratelimit` (1). The `sandbox` group grew from 9 to 12 with
+the free-play surface: custom messages require a session the caller created,
+caller-defined message identities are rejected (the sender is a server-side
+enum), and oversized custom messages are rejected before any interpretation.
+A second consecutive run minutes later was also 73/73 (not preserved — same
+revision, same result; this file is the canonical record).
+
+The same session also verified the deployed authored story end to end via
+the API: live Gemini interpretation on the first card
+(`interpretationSource: "live"`), candidate → convergence → distinct
+`awaiting_effort_confirmation` / `awaiting_plan_approval` stages → plan →
+counterparty deadline held then accepted with the preserved-plan narration
+("Feasibility was recalculated; … the plan was preserved unchanged") →
+automatic conflict repair → elapse → 60 verified minutes → explicit
+completion retaining them. Every activity event satisfied the audit-evidence
+allowlist (correlation ids on all 37 events; `plan_repaired` carrying
+`movedBlockCount: 1` and the planner version; outbox actions exposing
+idempotency keys, expected `If-Match` etags, and observed response etags;
+no message bodies anywhere in the projection).
+
 ## `security_probes_20260818t030803.json` — 70/70 green
 
 Recorded 2026-08-18T03:08Z against

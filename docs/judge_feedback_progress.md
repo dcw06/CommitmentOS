@@ -1,7 +1,8 @@
 # Judge-feedback pass: audit evidence projection and presentation clarity
 
 Date: 2026-08-18
-Status: source-complete; local verification green; owner deploy pending
+Status: LIVE-VERIFIED on revision `commitmentos-00055-ks8` (owner deployed
+via the release gate; see "Live verification" below)
 Baseline: tag `sandbox-hardened-baseline` — the verified hardened deployment
 this pass builds on. Roll back to that tag if anything here misbehaves.
 
@@ -82,10 +83,30 @@ Chromium UI audit (sandbox + demo, recorded interpretations):
   390px no horizontal overflow, zero console errors — all green
 ```
 
-## Required owner action
+## Live verification (2026-08-18, revision `commitmentos-00055-ks8`)
 
-Deploy via `.venv/bin/python scripts/deploy_commitmentos.py --deploy`, then
-rerun the sandbox security probe group and the authored interactive story on
-the new revision (including free-play live and cached interpretation, the
-injection-resistance message, and /demo remaining mutation-free) before
-describing this pass as live-verified. Do not overwrite prior evidence files.
+The owner deployed through `scripts/deploy_commitmentos.py --deploy`
+(release gate: session affinity, two-instance cap, latest traffic, live
+sandbox-model probe). Verified against the serving revision:
+
+- **Security probes 73/73 green**, all six groups — evidence
+  `docs/sandbox_evidence/security_probes_20260818t153546.json`; a second
+  consecutive run was also 73/73. The `/demo` surface remains mutation-free
+  (its 27-probe matrix is part of the run).
+- **Authored story end to end via the API**: live Gemini on the first card
+  (`interpretationSource: "live"`), candidate → convergence → the two
+  distinct pending stages → plan → deadline held then accepted with the
+  preserved-plan narration → automatic conflict repair → elapse → 60
+  verified minutes → explicit completion retaining them. Every activity
+  event satisfied the evidence allowlist; correlation ids on all events;
+  `plan_repaired` carried `movedBlockCount: 1` and the planner version;
+  outbox actions exposed idempotency keys, expected `If-Match` etags, and
+  observed response etags; no message bodies appeared in the projection.
+- The served bundle carries the boundary copy, evidence UI, seeded/session
+  labels, and proof-index link (verified by string presence in the deployed
+  asset).
+
+Remaining judge-visible spot-checks best done by a person in a browser:
+free-play cached-vs-live labeling on repeat sends and the
+injection-resistance message (both were exercised in the review that
+prompted this pass, on the prior revision).
