@@ -110,3 +110,87 @@ Remaining judge-visible spot-checks best done by a person in a browser:
 free-play cached-vs-live labeling on repeat sends and the
 injection-resistance message (both were exercised in the review that
 prompted this pass, on the prior revision).
+
+---
+
+# Round 2 (2026-08-18): repair stall, fallback semantics, date clarity
+
+Status: source-complete; local verification green; owner deploy pending.
+A second external review of `commitmentos-00055-ks8` prompted these
+diagnoses and fixes. No planner, policy, executor, or replay behavior
+changed.
+
+## Diagnosed with real measurements first
+
+- **The guided conflict repair blocked on a live Gemini call.** The
+  reviewer bounded the stall at 4.7–19.7 s; timed API runs against the
+  serving revision measured the conflict card at 4.82 s versus ~0.9 s for
+  every other action. Cause (read from source, then measured): the workflow
+  awaits `explain_decision` inside the repair path, and the sandbox
+  interpreter tried the live model with a 20 s transport timeout.
+  **Fix:** sandbox `explain_decision` is now deterministic — it returns the
+  workflow's plan-diff fallback immediately and never calls the model
+  (`DETERMINISTIC_EXPLANATION_MODEL_ID`). Production keeps live
+  explanations. A pulsing busy message covers residual latency honestly; no
+  phase streaming was built.
+- **The deadline card's `recorded-fallback` label was pinned by cache.**
+  Live diagnosis (three fresh-cache story runs against real Gemini): the
+  model intermittently returns a second proposal — a restatement of the
+  existing commitment beside the authored revision — and the exactly-one
+  contract rejected the whole output (`proposal_count`), caching the
+  failure for the process lifetime. **Fixes:** (1) proposal narrowing —
+  the conforming proposal is selected when extras appear; a narrowed accept
+  still passes every per-proposal semantic check plus the downstream
+  validator, and falls back only when nothing conforms; (2) non-live cache
+  entries now expire after `FALLBACK_CACHE_TTL_SECONDS` (10 min) while live
+  entries persist, so a failure is retried, not authoritative forever;
+  (3) rejection codes ride in the log message text so structured logging
+  keeps them. Validation itself was not weakened.
+- **"Current deadline evidence" was a mislabel, not a misbinding.** The
+  interpretation contract defines the first evidence span as the quote
+  anchoring the commitment itself, and the workflow binds
+  `deadline.evidence_id` to that span. The UI now labels it "Primary
+  evidence"; the deadline's true source span is `source_expression`,
+  already quoted beside the date. No production binding changed.
+- **Simulated-clock latency removed from sandbox evidence.**
+  `repair_latency_ms` / `decision_latency_ms` compute to ~0 under the
+  FakeClock and read as production measurements; they are no longer
+  projected. The measured latencies live in the frozen evidence pack.
+
+## Presentation
+
+- Seeded demo data carries explicit dates on the canonical scenario week
+  (Mon Sep 14 – Mon Sep 21): every block visibly precedes its commitment's
+  deadline, ending the "due Monday, blocks Tuesday/Friday" apparent
+  violation. Authored scenario semantics unchanged.
+- Completion is consequence-labeled ("Mark complete — cancels N future
+  blocks") with a confirm step; completed dashboard commitments show a
+  prominent explicit-completion line so verified-less-than-estimated reads
+  as honesty.
+- Effort copy is conditional: with no proposed minutes it says "enter your
+  estimate" instead of claiming the agent proposed one.
+- Event-specific evidence disclosure labels (Planner / Calendar action /
+  Policy / Check-in …) replace thirty identical summaries; each surface has
+  an `<h1>`; `Priority 0` renders as "Normal"; the demo banner opens with
+  the fixture-derived story sentence.
+
+## Local verification
+
+```text
+.venv/bin/pytest                 325 passed (+4: narrowing, fallback-only,
+                                 deterministic explanation, cache TTL)
+.venv/bin/ruff check .           clean
+cd frontend && npm run build     clean
+cd frontend && npm test          3 passed (effort-copy branches added)
+Chromium audit (sandbox + demo): 22/22 — narration, event-specific
+  disclosures, no simulated latency, primary-evidence label, consequence-
+  labeled completion + confirm, dated demo deadlines/blocks, banner story,
+  h1s, Normal priority, 390px, zero console errors
+```
+
+## Required owner action
+
+Deploy via the release gate, then rerun the security probes and re-time the
+conflict card on the new revision (expect ~1 s, matching the other
+actions). The deadline card should now label `live` on most fresh sessions;
+a `recorded-fallback` sighting self-heals within the TTL.

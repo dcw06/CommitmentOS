@@ -90,7 +90,7 @@ function CheckInRow({
     <div className="row">
       <span className="time-range">
         {DEMO_MODE
-          ? block.scheduledStart
+          ? `${block.scheduledStart}–${block.scheduledEnd}`
           : formatRange(block.scheduledStart, block.scheduledEnd)}
       </span>
       <div className="grow">
@@ -226,7 +226,9 @@ export function CommitmentDetailPage() {
           </div>
           <div>
             <div className="k">Priority</div>
-            <div className="v">{data.explicitPriority}</div>
+            <div className="v">
+              {data.explicitPriority === 0 ? "Normal" : data.explicitPriority}
+            </div>
           </div>
           <div>
             <div className="k">Risk</div>
@@ -241,7 +243,16 @@ export function CommitmentDetailPage() {
             <div className="v"><Badge value={summary.blockingStatus} /></div>
           </div>
         </div>
-        {confirmed > 0 && (
+        {completed && (
+          <p className="completion-evidence">
+            Closed by <strong>explicit completion</strong> with{" "}
+            {minutesLabel(verified)} verified
+            {confirmed > 0 ? ` of ${minutesLabel(confirmed)} estimated` : ""} —
+            the verified number is what was actually confirmed, never inflated
+            to match the estimate.
+          </p>
+        )}
+        {confirmed > 0 && !completed && (
           <>
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${progress * 100}%` }} />

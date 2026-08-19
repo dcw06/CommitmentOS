@@ -248,7 +248,7 @@ function tourStep(state: SandboxState): TourStep {
       step: 9,
       title: "Close the commitment explicitly",
       body:
-        "All confirmed effort is now verified. Use Mark this done to close " +
+        "All confirmed effort is now verified. Use Mark complete to close " +
         "the commitment with explicit completion evidence.",
     };
   }
@@ -471,6 +471,15 @@ export function ApprovalPanel({
           body:
             "The first plan was rejected. Edit the effort, or confirm the same " +
             "estimate to calculate another plan from the current calendar.",
+        }
+    : approval.requestType === "effort_confirmation" &&
+        approval.proposedMinutes === null
+      ? {
+          title: "How long will this take?",
+          body:
+            "The thread does not state an effort, and the agent will not " +
+            "invent one. Enter your estimate — it plans against exactly the " +
+            "number you confirm.",
         }
     : APPROVAL_COPY[approval.requestType] ?? {
         title: approval.requestType.replaceAll("_", " "),
@@ -828,9 +837,29 @@ const EVIDENCE_FIELD_LABELS: [keyof SandboxEvidenceProjection, string][] = [
   ["outboxStatus", "outbox status"],
   ["movedBlockCount", "moved blocks"],
   ["preservedBlockCount", "preserved blocks"],
-  ["repairLatencyMs", "repair latency (ms)"],
-  ["decisionLatencyMs", "decision latency (ms)"],
 ];
+
+// Event-specific disclosure labels, so thirty identical summaries become a
+// scannable list of what kind of proof each entry expands into.
+const EVIDENCE_DISCLOSURE_LABELS: Record<string, string> = {
+  observation_received: "Observation evidence",
+  interpretation_created: "Interpretation evidence",
+  interpretation_rejected: "Interpretation evidence",
+  confirmation_recorded: "Confirmation evidence",
+  deadline_change_confirmation: "Confirmation evidence",
+  deadline_required_confirmation: "Confirmation evidence",
+  retraction_confirmation: "Confirmation evidence",
+  risk_changed: "Risk evidence",
+  plan_proposed: "Planner evidence",
+  plan_repaired: "Planner evidence",
+  policy_decided: "Policy evidence",
+  outbox_written: "Calendar action evidence",
+  calendar_action_result: "Calendar action evidence",
+  work_check_in_recorded: "Check-in evidence",
+  work_block_activated: "Work block evidence",
+  work_check_in_required: "Work block evidence",
+  completion_recorded: "Completion evidence",
+};
 
 function ActivityEvidence({ event }: { event: SandboxActivity }) {
   const evidence = event.evidence ?? {};
@@ -843,7 +872,9 @@ function ActivityEvidence({ event }: { event: SandboxActivity }) {
   }
   return (
     <details className="sandbox-evidence-details">
-      <summary>session execution evidence</summary>
+      <summary>
+        {EVIDENCE_DISCLOSURE_LABELS[event.eventType] ?? "Execution evidence"}
+      </summary>
       <dl>
         {event.correlationId ? (
           <div>
@@ -934,6 +965,18 @@ function CommitmentPanel({
     (hasActiveBlocks ||
       (commitment.confirmedMinutes !== null &&
         commitment.remainingMinutes === 0));
+  // Completion cancels this commitment's remaining reserved blocks — say so
+  // on the control, and ask once before doing it.
+  const cancelableBlocks = blocks.filter(
+    (block) =>
+      block.commitmentId === commitment.commitmentId &&
+      ["planned", "active"].includes(block.executionState),
+  ).length;
+  const [confirmingComplete, setConfirmingComplete] = useState(false);
+  const completeLabel =
+    cancelableBlocks > 0
+      ? `Mark complete — cancels ${cancelableBlocks} future block${cancelableBlocks === 1 ? "" : "s"}`
+      : "Mark complete";
   return (
     <div className="sandbox-commitment">
       <div className="sandbox-commitment-head">
@@ -977,24 +1020,53 @@ function CommitmentPanel({
       </dl>
       {commitment.evidence.map((evidence, index) => (
         <p className="sandbox-evidence" key={`${evidence.createdAt ?? "evidence"}-${index}`}>
-          {evidence.supportsDeadline
+          {evidence.primary
             ? evidence.kind === "deadline_confirmation"
               ? "Explicit deadline confirmation"
-              : "Current deadline evidence"
+              : "Primary evidence"
             : evidence.kind === "commitment_completion"
               ? "Completion evidence"
               : "Earlier evidence"}
           : “{evidence.excerpt}”
         </p>
       ))}
-      {canComplete ? (
+      {canComplete && !confirmingComplete ? (
         <button
           type="button"
           disabled={busy}
-          onClick={() => onComplete(commitment.commitmentId)}
+          onClick={() => setConfirmingComplete(true)}
         >
-          Mark this done
+          {completeLabel}
         </button>
+      ) : null}
+      {canComplete && confirmingComplete ? (
+        <div className="sandbox-complete-confirm">
+          <p>
+            {cancelableBlocks > 0
+              ? `Complete this commitment with ${minutesLabel(commitment.verifiedMinutes ?? 0)} verified and cancel ${cancelableBlocks} remaining reserved block${cancelableBlocks === 1 ? "" : "s"}?`
+              : `Complete this commitment with ${minutesLabel(commitment.verifiedMinutes ?? 0)} verified?`}
+          </p>
+          <div className="sandbox-approval-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => setConfirmingComplete(false)}
+            >
+              Keep it open
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirmingComplete(false);
+                onComplete(commitment.commitmentId);
+              }}
+            >
+              Complete it
+            </button>
+          </div>
+        </div>
       ) : null}
       {commitment.lifecycleStatus === "completed" ? (
         <p className="sandbox-note">
@@ -1199,6 +1271,14 @@ export function SandboxPage() {
             <p className="sandbox-interpretation-note">
               {INTERPRETATION_COPY[state.interpretationSource]}
             </p>
+          ) : null}
+
+          {busy ? (
+            <div className="sandbox-busy" role="status">
+              The agent is working — delivering the input, reconciling durable
+              state, replanning, and executing calendar actions. This view
+              updates when the pass completes.
+            </div>
           ) : null}
 
           {state.outcome ? (

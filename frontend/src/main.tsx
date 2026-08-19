@@ -43,6 +43,7 @@ function LiveControlStatus() {
 function SandboxShell() {
   return (
     <>
+      <h1 className="visually-hidden">CommitmentOS interactive sandbox</h1>
       <div className="demo-banner sandbox-banner">
         <strong>Interactive sandbox</strong> — real reconciliation and policy
         code running against session-scoped inbox, calendar, and persistence
@@ -85,11 +86,16 @@ function Shell() {
 
   return (
     <>
+      <h1 className="visually-hidden">
+        {DEMO_MODE ? "CommitmentOS seeded judge dashboard" : "CommitmentOS dashboard"}
+      </h1>
       {DEMO_MODE && (
         <div className="demo-banner">
-          <strong>Seeded judge mode</strong> — read-only demonstration data derived
-          from a fixed scenario; no live mailbox content and no mutation
-          capability. <a href="/sandbox">Want to drive it yourself? →</a>
+          <strong>Seeded judge mode</strong> — a new meeting landed on reserved
+          time; CommitmentOS moved one block, preserved the other four, and kept
+          both commitments feasible. Read-only demonstration data derived from a
+          fixed scenario; no live mailbox content and no mutation capability.{" "}
+          <a href="/sandbox">Want to drive it yourself? →</a>
         </div>
       )}
       <header className="shell-header">

@@ -14,6 +14,10 @@ from datetime import datetime
 
 import pytest
 
+from commitmentos.application.ports.model_interpreter import (
+    InterpretationResult,
+    ModelInvocationMetadata,
+)
 from commitmentos.contracts.model_output import (
     CommitmentInterpretationV1,
     derive_span_key,
@@ -23,6 +27,12 @@ from commitmentos.contracts.model_output import (
 from commitmentos.domain.commitments.identity import IdentityOperation
 from commitmentos.domain.commitments.models import OwnershipType
 from commitmentos.sandbox import engine
+from commitmentos.sandbox.interpreter import (
+    DETERMINISTIC_EXPLANATION_MODEL_ID,
+    FALLBACK_CACHE_TTL_SECONDS,
+    SandboxInterpretationCache,
+    SandboxInterpreter,
+)
 from commitmentos.sandbox.scenario import MESSAGES, THREAD_SUBJECT
 from commitmentos.sandbox.session import (
     SandboxMode,
@@ -693,7 +703,7 @@ class TestSandboxFlow:
         assert after["commitmentId"] == before["commitmentId"], "deadline change forked"
         assert after["revision"] > before["revision"], "revision did not advance"
         assert after["deadline"] < before["deadline"], "deadline did not move earlier"
-        assert after["evidence"][0]["supportsDeadline"] is True
+        assert after["evidence"][0]["primary"] is True
         assert "Thursday" in after["evidence"][0]["excerpt"]
         accepted = await engine.render(session)
         assert accepted["thread"][-1]["note"] == (
@@ -896,8 +906,6 @@ ALLOWED_EVIDENCE_KEYS = {
     "outboxStatus",
     "movedBlockCount",
     "preservedBlockCount",
-    "repairLatencyMs",
-    "decisionLatencyMs",
     "plannerRunId",
     "plannerVersion",
     "outboxActions",
@@ -1048,3 +1056,95 @@ class TestAuditEvidenceProjection:
             {"decision": "approve", "confirmed_minutes": 180},
         )
         assert outcome is None
+
+
+class TestInterpreterBoundaries:
+    async def test_multi_proposal_live_output_narrows_to_conforming(self) -> None:
+        """An extra restatement proposal must not force the recorded fallback.
+
+        Measured live: the model sometimes returns the authored revision
+        beside a restatement of the existing commitment. The conforming
+        proposal is selected; the label stays honestly `live`.
+        """
+        live = FakeModelInterpreter()
+        live.script(_recorded("msg_request"))
+        live.script(_recorded("msg_accept"))
+        deadline = _recorded("msg_deadline_change")
+        conforming = deadline.proposals[0]
+        friday_restatement = replace(
+            conforming,
+            deadline=_recorded("msg_accept").proposals[0].deadline,
+        )
+        live.script(
+            replace(deadline, proposals=(friday_restatement, conforming))
+        )
+        store = SandboxSessionStore(live_interpreter=live)
+        session = store.create()
+
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+        await _approve(session, "initial_plan_approval")
+        await _play(session, "msg_deadline_change", store)
+
+        view = await engine.render(session)
+        assert view["interpretationSource"] == "live"
+        assert len(view["commitments"]) == 1
+        assert any(
+            row["requestType"] == "deadline_change_confirmation"
+            for row in view["approvals"]
+        )
+
+    async def test_nonconforming_only_output_still_falls_back(self) -> None:
+        live = FakeModelInterpreter()
+        request = _recorded("msg_request")
+        live.script(
+            replace(
+                request,
+                proposals=(
+                    replace(
+                        request.proposals[0],
+                        proposed_identity_operation=IdentityOperation.UPDATE_EXISTING,
+                    ),
+                ),
+            )
+        )
+        store = SandboxSessionStore(live_interpreter=live)
+        session = store.create()
+        await _play(session, "msg_request", store)
+        assert (await engine.render(session))[
+            "interpretationSource"
+        ] == "recorded-fallback"
+
+    async def test_sandbox_explanation_is_deterministic_never_live(self) -> None:
+        """A model round-trip must never sit inside the repair response."""
+        interpreter = SandboxInterpreter(FakeModelInterpreter())
+        text, metadata = await interpreter.explain_decision(
+            {"fallback_explanation": "One block moved; four preserved."}, ()
+        )
+        assert text == "One block moved; four preserved."
+        assert metadata.model_id == DETERMINISTIC_EXPLANATION_MODEL_ID
+
+    async def test_fallback_cache_entries_expire_but_live_entries_stay(self) -> None:
+        now = [0.0]
+        cache = SandboxInterpretationCache(clock=lambda: now[0])
+        result = InterpretationResult(
+            interpretation=_recorded("msg_request"),
+            metadata=ModelInvocationMetadata(
+                model_id="fake-gemini",
+                prompt_version="commitment_interpretation_v2",
+                schema_version="extraction_v2",
+                thinking_level="low",
+                latency_ms=1,
+                input_tokens=1,
+                output_tokens=1,
+            ),
+        )
+        cache.put("live-key", result, "live")
+        cache.put("fallback-key", result, "recorded-fallback")
+
+        now[0] = FALLBACK_CACHE_TTL_SECONDS + 1
+        assert cache.get("live-key") is not None, "live result must persist"
+        assert cache.get("fallback-key") is None, (
+            "a failed live attempt must not stay authoritative past the TTL"
+        )

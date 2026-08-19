@@ -1,22 +1,26 @@
 {
-  "seeded": true,
-  "generated_from": "golden_scenario_rev_1",
-  "outcome_strip": {
-    "commitments_kept_feasible": 2,
-    "work_minutes_reserved": 120,
-    "conflicts_repaired_automatically": 1,
-    "unaffected_blocks_preserved": 4,
-    "manual_reschedules_avoided": 1
-  },
-  "today_blocks": [
-    {
-      "commitment_title": "Prepare Q3 data summary for Sam",
-      "start": "14:00",
-      "end": "15:00",
-      "execution_state": "planned"
-    }
-  ],
-  "at_risk": [],
-  "pending_decisions": [],
-  "monitoring": {"observation_mode": "active", "automatic_action_mode": "enabled", "held_actions": 0}
+ "seeded": true,
+ "generated_from": "golden_scenario_rev_1",
+ "outcome_strip": {
+  "commitments_kept_feasible": 2,
+  "work_minutes_reserved": 120,
+  "conflicts_repaired_automatically": 1,
+  "unaffected_blocks_preserved": 4,
+  "manual_reschedules_avoided": 1
+ },
+ "today_blocks": [
+  {
+   "commitment_title": "Prepare Q3 data summary for Sam",
+   "start": "2:00 PM",
+   "end": "3:00 PM",
+   "execution_state": "planned"
+  }
+ ],
+ "at_risk": [],
+ "pending_decisions": [],
+ "monitoring": {
+  "observation_mode": "active",
+  "automatic_action_mode": "enabled",
+  "held_actions": 0
+ }
 }

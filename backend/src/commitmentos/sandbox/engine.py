@@ -860,14 +860,20 @@ def _evidence_view(
             {
                 "excerpt": excerpt,
                 "kind": document.get("evidence_type") or document.get("kind"),
-                "supportsDeadline": evidence_id == deadline_evidence_id,
+                # The commitment's bound evidence row. By the interpretation
+                # contract the first evidence span anchors the commitment
+                # itself (a deadline_confirmation row is the exception and is
+                # genuinely deadline-specific) — so this flag means "primary",
+                # not "supports the deadline". The deadline's own source span
+                # is `deadline.source_expression`, rendered beside the date.
+                "primary": evidence_id == deadline_evidence_id,
                 "createdAt": _iso(
                     document.get("created_at") or document.get("recorded_at")
                 ),
             }
         )
     rows.sort(
-        key=lambda row: (bool(row["supportsDeadline"]), row["createdAt"] or ""),
+        key=lambda row: (bool(row["primary"]), row["createdAt"] or ""),
         reverse=True,
     )
     return rows[:4]
@@ -1001,8 +1007,10 @@ _EVIDENCE_PAYLOAD_FIELDS: tuple[tuple[str, str], ...] = (
     ("work_block_id", "workBlockId"),
     ("execution_status", "outboxStatus"),
     ("moved_block_count", "movedBlockCount"),
-    ("repair_latency_ms", "repairLatencyMs"),
-    ("decision_latency_ms", "decisionLatencyMs"),
+    # repair_latency_ms / decision_latency_ms are deliberately NOT projected:
+    # the sandbox runs on a simulated clock, so those audit values compute to
+    # ~0 and would read as a production measurement. The measured latencies
+    # live in the frozen evidence pack (docs/proof_index.md).
 )
 
 _EVIDENCE_ACTION_LIMIT = 6

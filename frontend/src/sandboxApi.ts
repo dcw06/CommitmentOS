@@ -49,7 +49,7 @@ export interface SandboxCommitment {
   evidence: {
     excerpt: string;
     kind: string | null;
-    supportsDeadline: boolean;
+    primary: boolean;
     createdAt: string | null;
   }[];
 }
@@ -124,8 +124,6 @@ export interface SandboxEvidenceProjection {
   outboxStatus?: string;
   movedBlockCount?: number;
   preservedBlockCount?: number;
-  repairLatencyMs?: number;
-  decisionLatencyMs?: number;
   plannerRunId?: string;
   plannerVersion?: string;
   outboxActions?: SandboxOutboxEvidence[];

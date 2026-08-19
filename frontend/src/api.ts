@@ -459,7 +459,7 @@ export async function fetchCommitmentDetail(
         .map((excerpt) => ({ excerpt: str(excerpt), confidence: null })),
       workBlocks: list(item.work_blocks).map((block, blockIndex) => ({
         workBlockId: `demo-${blockIndex}`,
-        scheduledStart: `${str(block.day)} ${str(block.start)}`,
+        scheduledStart: `${str(block.day)}, ${str(block.start)}`,
         scheduledEnd: str(block.end),
         executionState: str(block.execution_state),
         verifiedMinutes: num(block.verified_minutes) ?? 0,

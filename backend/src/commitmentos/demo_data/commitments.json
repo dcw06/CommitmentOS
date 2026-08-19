@@ -6,7 +6,7 @@
     "ownership_type": "my_commitment",
     "beneficiary": "Professor Chen",
     "lifecycle_status": "completed",
-    "deadline": "Thursday 16:00",
+    "deadline": "Thu, Sep 17, 4:00 PM PT",
     "deadline_source_expression": "bring the review forward to Thursday at 4 p.m.",
     "deadline_confidence": 0.93,
     "risk_level": "unknown",
@@ -18,9 +18,9 @@
       "Could we bring the review forward to Thursday at 4 p.m.?"
     ],
     "work_blocks": [
-      {"day": "Tuesday", "start": "09:00", "end": "10:00", "execution_state": "completed", "verified_minutes": 60},
-      {"day": "Wednesday", "start": "11:00", "end": "12:00", "execution_state": "completed", "verified_minutes": 60, "note": "moved by automatic repair after a meeting conflict"},
-      {"day": "Thursday", "start": "09:00", "end": "10:00", "execution_state": "missed", "verified_minutes": 0}
+      {"day": "Tue, Sep 15", "start": "9:00 AM", "end": "10:00 AM", "execution_state": "completed", "verified_minutes": 60},
+      {"day": "Wed, Sep 16", "start": "11:00 AM", "end": "12:00 PM", "execution_state": "completed", "verified_minutes": 60, "note": "moved by automatic repair after a meeting conflict"},
+      {"day": "Thu, Sep 17", "start": "9:00 AM", "end": "10:00 AM", "execution_state": "missed", "verified_minutes": 0}
     ]
   },
   {
@@ -30,7 +30,7 @@
     "ownership_type": "my_commitment",
     "beneficiary": "Sam",
     "lifecycle_status": "active",
-    "deadline": "Monday 12:00",
+    "deadline": "Mon, Sep 21, 12:00 PM PT",
     "deadline_confidence": 0.9,
     "risk_level": "on_track",
     "confirmed_minutes": 120,
@@ -40,8 +40,8 @@
       "Can you have the Q3 data summary ready for Monday's sync?"
     ],
     "work_blocks": [
-      {"day": "Tuesday", "start": "14:00", "end": "15:00", "execution_state": "planned", "verified_minutes": 0},
-      {"day": "Friday", "start": "10:00", "end": "11:00", "execution_state": "planned", "verified_minutes": 0}
+      {"day": "Tue, Sep 15", "start": "2:00 PM", "end": "3:00 PM", "execution_state": "planned", "verified_minutes": 0},
+      {"day": "Fri, Sep 18", "start": "10:00 AM", "end": "11:00 AM", "execution_state": "planned", "verified_minutes": 0}
     ]
   }
 ]

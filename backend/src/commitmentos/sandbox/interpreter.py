@@ -51,12 +51,18 @@ from commitmentos.sandbox.scenario import MESSAGES, PACIFIC, MessageCard
 logger = logging.getLogger(__name__)
 
 RECORDED_MODEL_ID = "recorded-interpretation"
+DETERMINISTIC_EXPLANATION_MODEL_ID = "deterministic-plan-diff"
 MAX_CACHE_ENTRIES = 256
 MAX_CACHE_LOCKS = 512
 MAX_MODEL_CALLS_PER_WINDOW = 12
 MODEL_CALL_WINDOW_SECONDS = 60.0
 MAX_CONCURRENT_MODEL_CALLS = 2
 MAX_MODEL_CALLS_PER_SESSION = 12
+# A cached non-live result is a degradation, not a fact about the model. It
+# is kept only briefly so a transient failure or a one-off nonconforming
+# output cannot pin "recorded-fallback" for the process lifetime — later
+# sessions get a fresh live attempt, still bounded by the rolling gate.
+FALLBACK_CACHE_TTL_SECONDS = 600.0
 
 T = TypeVar("T")
 
@@ -144,6 +150,7 @@ class BoundedSandboxModelInterpreter(ModelInterpreter):
 class _CacheEntry:
     result: InterpretationResult
     origin: str
+    stored_at: float
 
 
 class SandboxInterpretationCache:
@@ -151,25 +158,40 @@ class SandboxInterpretationCache:
 
     The values are safe to share because the key includes the complete candidate
     context, not only its length. Per-key async locks also ensure two judges do
-    not pay for the same first live invocation concurrently.
+    not pay for the same first live invocation concurrently. Live results stay
+    for the cache's lifetime (the process); non-live results expire after
+    `FALLBACK_CACHE_TTL_SECONDS` so a failure is retried rather than treated as
+    permanently authoritative.
     """
 
-    def __init__(self, max_entries: int = MAX_CACHE_ENTRIES) -> None:
+    def __init__(
+        self,
+        max_entries: int = MAX_CACHE_ENTRIES,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._entries: OrderedDict[str, _CacheEntry] = OrderedDict()
         self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
         self._max_entries = max_entries
+        self._clock = clock
         self._guard = threading.Lock()
 
     def get(self, key: str) -> _CacheEntry | None:
         with self._guard:
             entry = self._entries.get(key)
-            if entry is not None:
-                self._entries.move_to_end(key)
+            if entry is None:
+                return None
+            if (
+                entry.origin != "live"
+                and self._clock() - entry.stored_at > FALLBACK_CACHE_TTL_SECONDS
+            ):
+                self._entries.pop(key, None)
+                return None
+            self._entries.move_to_end(key)
             return entry
 
-    def put(self, key: str, entry: _CacheEntry) -> None:
+    def put(self, key: str, result: InterpretationResult, origin: str) -> None:
         with self._guard:
-            self._entries[key] = entry
+            self._entries[key] = _CacheEntry(result, origin, self._clock())
             self._entries.move_to_end(key)
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)
@@ -276,26 +298,14 @@ def _deadline_day(value: str | None) -> date | None:
         return None
 
 
-def _semantic_errors(
+def _proposal_errors(
     card: MessageCard,
-    interpretation: CommitmentInterpretationV1,
-    candidate_commitments: Sequence[Mapping[str, str]],
+    proposal,  # noqa: ANN001 - CommitmentProposalV1, kept untyped like the wire helpers
+    expected_proposal,  # noqa: ANN001
+    candidate_ids: set[str],
 ) -> tuple[str, ...]:
-    """Validate the semantic promise made by this fixed judge card.
+    """The per-proposal semantic checks for one fixed judge card."""
 
-    The production validator still checks evidence and authority. This extra
-    sandbox-only boundary prevents a schema-valid model variation from turning
-    the authored one-commitment story into a different (but safely escalated)
-    product branch while the explanatory copy claims the authored branch ran.
-    """
-
-    if len(interpretation.proposals) != 1:
-        return ("proposal_count",)
-    proposal = interpretation.proposals[0]
-    expected = _recorded(card.body)
-    if expected is None or len(expected.proposals) != 1:
-        return ("recorded_contract_missing",)
-    expected_proposal = expected.proposals[0]
     errors: list[str] = []
     outcome = proposal.normalized_outcome.casefold()
     if not all(token in outcome for token in ("vendor", "comparison", "deck")):
@@ -311,11 +321,6 @@ def _semantic_errors(
     ):
         errors.append("deadline_day")
 
-    candidate_ids = {
-        str(candidate.get("commitment_id", ""))
-        for candidate in candidate_commitments
-        if candidate.get("commitment_id")
-    }
     if card.card_id == "msg_request":
         if proposal.proposed_identity_operation is not IdentityOperation.CREATE:
             errors.append("request_identity")
@@ -338,6 +343,52 @@ def _semantic_errors(
         if proposal.target_commitment_id not in candidate_ids:
             errors.append("deadline_target")
     return tuple(errors)
+
+
+def _select_conforming_proposal(
+    card: MessageCard,
+    interpretation: CommitmentInterpretationV1,
+    candidate_commitments: Sequence[Mapping[str, str]],
+) -> tuple[CommitmentInterpretationV1 | None, tuple[str, ...]]:
+    """Narrow live output to the authored branch instead of rejecting wholesale.
+
+    The production validator still checks evidence and authority. This extra
+    sandbox-only boundary prevents a schema-valid model variation from turning
+    the authored one-commitment story into a different (but safely escalated)
+    product branch while the explanatory copy claims the authored branch ran.
+
+    The model sometimes returns extra proposals for the full-thread render
+    (measured: a restatement of the existing commitment beside the authored
+    revision). Selection is a narrowing, never a weakening: the accepted
+    proposal must pass every per-proposal check, and the downstream
+    deterministic validator is unchanged. Only when no proposal conforms does
+    the card fall back to its recorded interpretation.
+    """
+
+    if not interpretation.proposals:
+        return None, ("proposal_count",)
+    expected = _recorded(card.body)
+    if expected is None or len(expected.proposals) != 1:
+        return None, ("recorded_contract_missing",)
+    expected_proposal = expected.proposals[0]
+    candidate_ids = {
+        str(candidate.get("commitment_id", ""))
+        for candidate in candidate_commitments
+        if candidate.get("commitment_id")
+    }
+    all_errors: list[str] = []
+    for proposal in interpretation.proposals:
+        errors = _proposal_errors(card, proposal, expected_proposal, candidate_ids)
+        if not errors:
+            if len(interpretation.proposals) > 1:
+                logger.info(
+                    "sandbox live interpretation narrowed to the conforming "
+                    "proposal (%d returned)",
+                    len(interpretation.proposals),
+                )
+            return replace(interpretation, proposals=(proposal,)), ()
+        all_errors.extend(errors)
+    return None, tuple(dict.fromkeys(all_errors))
 
 
 class SandboxInterpreter(ModelInterpreter):
@@ -420,19 +471,23 @@ class SandboxInterpreter(ModelInterpreter):
                     bound = _bind_candidate_target(
                         result.interpretation, candidate_commitments
                     )
-                    result = replace(result, interpretation=bound)
-                    semantic_errors = (
-                        _semantic_errors(card, bound, candidate_commitments)
-                        if card is not None
-                        else ("unknown_card",)
-                    )
-                    if not semantic_errors:
-                        self._cache.put(key, _CacheEntry(result, "live"))
+                    if card is not None:
+                        narrowed, semantic_errors = _select_conforming_proposal(
+                            card, bound, candidate_commitments
+                        )
+                    else:
+                        narrowed, semantic_errors = None, ("unknown_card",)
+                    if narrowed is not None:
+                        result = replace(result, interpretation=narrowed)
+                        self._cache.put(key, result, "live")
                         self.last_source = "live"
                         return result
+                    # The codes ride in the message so structured logging that
+                    # drops unknown extras still records why the card fell back.
                     logger.warning(
-                        "sandbox live interpretation violated card contract, using record",
-                        extra={"semantic_error_codes": semantic_errors},
+                        "sandbox live interpretation violated card contract "
+                        "(%s), using record",
+                        ",".join(semantic_errors),
                     )
 
             interpretation = _recorded(card.body) if card is not None else None
@@ -453,7 +508,7 @@ class SandboxInterpreter(ModelInterpreter):
                     output_tokens=0,
                 ),
             )
-            self._cache.put(key, _CacheEntry(result, fallback_origin))
+            self._cache.put(key, result, fallback_origin)
             self.last_source = fallback_origin
             return result
 
@@ -488,18 +543,18 @@ class SandboxInterpreter(ModelInterpreter):
         decision: Mapping[str, object],
         evidence: Sequence[Mapping[str, str]],
     ) -> tuple[str, ModelInvocationMetadata]:
-        if self._live is not None:
-            try:
-                return await self._live.explain_decision(decision, evidence)
-            except Exception as error:  # noqa: BLE001
-                logger.warning(
-                    "sandbox live explanation unavailable, using fallback",
-                    extra={"error_type": type(error).__name__},
-                )
+        # Deliberately deterministic — never a live call. The workflow awaits
+        # this inside the repair path, so a model round-trip here would put up
+        # to the 20 s transport timeout between a conflict and its repaired
+        # response (measured live: 4.8-19.7 s on the conflict card versus
+        # ~0.9 s for every other action). The explanation is non-authoritative
+        # narration; the plan-diff fallback the workflow supplies is honest
+        # and instant. Production keeps live explanations.
+        del evidence
         return (
             str(decision.get("fallback_explanation", "The plan was updated.")),
             ModelInvocationMetadata(
-                model_id=RECORDED_MODEL_ID,
+                model_id=DETERMINISTIC_EXPLANATION_MODEL_ID,
                 prompt_version="explanation_v1",
                 schema_version="explanation_v1",
                 thinking_level="low",

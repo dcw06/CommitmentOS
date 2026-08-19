@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(cleanup);
 
 import { SandboxApproval, SandboxApprovalDecision } from "../sandboxApi";
 import { ApprovalPanel } from "./sandbox";
@@ -27,7 +29,47 @@ function missingDeadlineApproval(): SandboxApproval {
   };
 }
 
+function effortApproval(proposedMinutes: number | null): SandboxApproval {
+  return {
+    ...missingDeadlineApproval(),
+    approvalId: "approval-effort-1",
+    requestType: "effort_confirmation",
+    reason: null,
+    proposedMinutes,
+  };
+}
+
 describe("ApprovalPanel", () => {
+  it("says 'enter your estimate' when the thread proposed no effort", () => {
+    render(
+      <ApprovalPanel
+        approval={effortApproval(null)}
+        busy={false}
+        onResolve={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/does not state an effort/, { exact: false }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/proposes what the thread implies/)).toBeNull();
+  });
+
+  it("says the agent proposes the estimate when one exists", () => {
+    render(
+      <ApprovalPanel
+        approval={effortApproval(180)}
+        busy={false}
+        onResolve={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/proposes what the thread implies/, { exact: false }),
+    ).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/Minutes for/) as HTMLInputElement).value,
+    ).toBe("180");
+  });
+
   it("enables and submits a valid future missing deadline", () => {
     const onResolve = vi.fn<
       (approvalId: string, decision: SandboxApprovalDecision) => void
