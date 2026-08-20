@@ -1277,8 +1277,14 @@ export function SandboxPage() {
 
           {state.mode === "guided" && messageCards.length === 0 && worldCards.length === 0 ? (
             <div className="sandbox-empty">
-              You have played every card in the deck. Start over to run the story
-              again.
+              {state.commitments.some(
+                (commitment) =>
+                  !["completed", "dismissed", "canceled"].includes(
+                    commitment.lifecycleStatus,
+                  ),
+              )
+                ? "The thread is complete. Explicitly close the commitment when the work is finished."
+                : "You have played every card in the deck. Start over to run the story again."}
             </div>
           ) : null}
 

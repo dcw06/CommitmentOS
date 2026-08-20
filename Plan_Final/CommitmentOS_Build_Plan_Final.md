@@ -332,7 +332,7 @@ The single Cloud Run service contains four explicitly separated route classes:
 3.  **Calendar webhook route:** publicly reachable because Calendar push does not attach the configured Pub/Sub or Cloud Tasks OIDC identity; protected by a high-entropy channel token, channel ID, resource ID, expected Calendar mapping, strict method and body rules, and rate limiting. A valid signal can only enqueue a Calendar fetch.
 4.  **Read-only demo routes:** seeded data only, with no live mailbox content, approval endpoints, execution controls, credentials, or mutation capability.
 
-![CommitmentOS P0 architecture: scheduler-driven recovery, durable observations and domain state, fast action-result continuation, and independent Calendar-watch verification](CommitmentOS_P0_Architecture.png){width=6.5in}
+![CommitmentOS P0 architecture: scheduler-driven recovery, durable observations and domain state, fast action-result continuation, and independent Calendar-watch verification](CommitmentOS_P0_Architecture.png)
 
 The diagram is an implementation baseline, not a claim that the system already exists. Update it only when a deployed architectural boundary changes.
 

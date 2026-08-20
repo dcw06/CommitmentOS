@@ -577,6 +577,10 @@ class TestSandboxFlow:
         planned = [row for row in blocks if row["executionState"] == "planned"]
         target = planned[0]
         outcome = await _play(session, "event_conflict", store)
+        # The receipt derives every number from the actual plan_repaired
+        # payload: this story moves one block and preserves the other two.
+        assert "1 block moved, 2 preserved" in outcome.detail, outcome.detail
+        assert "feasibility restored" in outcome.detail, outcome.detail
         view = await engine.render(session)
         moved = next(
             row for row in view["blocks"] if row["workBlockId"] == target["workBlockId"]

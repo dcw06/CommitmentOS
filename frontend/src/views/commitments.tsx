@@ -63,7 +63,10 @@ export function CommitmentsPage() {
                 )}
               </div>
               <Badge value={item.lifecycleStatus} />
-              {item.riskLevel !== "unknown" && <Badge value={item.riskLevel} />}
+              {item.riskLevel !== "unknown" &&
+                !["completed", "dismissed", "canceled"].includes(
+                  item.lifecycleStatus,
+                ) && <Badge value={item.riskLevel} />}
             </div>
           </Link>
         ))}
@@ -232,7 +235,17 @@ export function CommitmentDetailPage() {
           </div>
           <div>
             <div className="k">Risk</div>
-            <div className="v"><Badge value={summary.riskLevel} /></div>
+            <div className="v">
+              {terminal ? (
+                // Presentation only: the stored risk value stays in the data
+                // for audit history; a closed commitment has no forward risk.
+                <span className="sub">
+                  Not applicable — {summary.lifecycleStatus}
+                </span>
+              ) : (
+                <Badge value={summary.riskLevel} />
+              )}
+            </div>
           </div>
           <div>
             <div className="k">Remaining effort</div>

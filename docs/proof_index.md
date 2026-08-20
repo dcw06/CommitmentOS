@@ -6,6 +6,22 @@ guards, and the security matrix — were measured against the deployed Cloud Run
 service. This page indexes exactly where each measurement lives. Evidence
 files are frozen records: they are never regenerated or edited.
 
+## The numbers, with their scope
+
+Every result names the Cloud Run revision it was measured on — the revision
+is the build identifier — and the frozen file recording it (detailed in the
+sections below).
+
+| Result | Scope | Revision | Date |
+| --- | --- | --- | --- |
+| 10/10 consecutive golden runs, 61/61 checkpoints each | Full real Gmail → interpretation → Calendar path, live Gemini every run | `commitmentos-00042-fcj` | 2026-08-15 |
+| 10/10 consecutive golden runs, 50/50 checkpoints each | Seeded mode, post-hardening policy v2 | `commitmentos-00045-dwk` | 2026-08-17 |
+| 0 duplicate commitments · 0 duplicate Calendar events | Checkpointed inside every golden run above | both campaign revisions | 2026-08-15/17 |
+| Conflict-to-repair 7.2–10.2 s (mean 9.1 s) | Live deployed service, real Calendar conflict, warmed 15 s budget | `commitmentos-00042-fcj` | 2026-08-15 |
+| Byte-identical replay of every observation and action | Re-delivered inside all 20 golden runs above | both campaign revisions | 2026-08-15/17 |
+| 73/73 live security probes | Session/CSRF/OIDC matrices, full `/demo` mutation rejection, sandbox isolation | `commitmentos-00058-dtx` | 2026-08-20 |
+| 32/32 extraction eval, 100% every metric | Fixture suite over live Gemini, ~$0.0008/message | pre-deploy eval run | 2026-08-13 |
+
 ## Golden campaign: ten consecutive live runs, byte-identical replay
 
 | Claim | Where it is proven |

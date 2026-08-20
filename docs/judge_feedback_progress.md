@@ -245,3 +245,38 @@ Owner action: deploy via the release gate, rerun the probe suite, and
 verify on the live revision that the guided story still performs exactly
 one minimal conflict repair (the probes' authored story plus a timed
 conflict card cover this).
+
+
+---
+
+# Round 4 (2026-08-20): final micro-batch before the hard freeze
+
+Status: source-complete; local verification green; owner deploy pending.
+Two further reviews (both ~86/100) converged on evidence curation and three
+small polish defects. Scope after this batch is frozen: the remaining score
+gap is the real-account video, not code.
+
+- **Repair receipt.** The conflict card's outcome now derives a one-line
+  receipt from the actual `plan_repaired` payload — moved count, preserved
+  count, and feasibility (all allocation shortfalls zero) — e.g. "Meeting
+  observed → conflict detected → 1 block moved, 2 preserved → feasibility
+  restored." Nothing hardcoded; the seeded dashboard scenario preserves a
+  different count and would render its own numbers.
+- **No premature "played every card".** With the deck exhausted but the
+  commitment still open, the left panel now says "The thread is complete.
+  Explicitly close the commitment when the work is finished."
+- **Completed risk is presentation-fixed.** Terminal commitments render
+  "Not applicable — <status>" in place of the risk badge (list badge hidden
+  too); the stored risk value is untouched for audit history.
+- **Proof index numbers table.** The headline results (10/10 ×2 campaigns,
+  0 duplicates, 7.2–10.2 s repair, 73/73 probes, 32/32 eval, replay) now
+  sit in one table with scope, measuring revision (the build identifier),
+  and date — so no number appears context-free.
+- **Pandoc artifact removed** from the build plan's architecture figure.
+
+Local verification: 328 tests green (receipt correctness asserted inside
+the full-story test), ruff clean, frontend builds, vitest 3 green, Chromium
+audit 21/21 (receipt from real payload, completion copy, not-applicable
+risk, plus all prior checks).
+
+Owner action: deploy via the release gate, rerun probes; then stop coding.

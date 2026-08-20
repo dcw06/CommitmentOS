@@ -337,9 +337,47 @@ async def _play_conflict(world: SandboxWorld, card: ActionCard) -> CardOutcome:
     moved = world.store["work_blocks"][block_id]
     if moved["scheduled_start"] != original_start:
         headline = "Conflict detected and repaired automatically"
+        detail = _repair_receipt(world) or card.note
     else:
         headline = "Conflict detected; the agent escalated instead of moving it"
-    return CardOutcome(card.card_id, headline, card.note)
+        detail = card.note
+    return CardOutcome(card.card_id, headline, detail)
+
+
+def _repair_receipt(world: SandboxWorld) -> str | None:
+    """A one-line receipt derived from the actual plan_repaired audit payload.
+
+    Every number comes from the event the workflow recorded — nothing is
+    hardcoded, because different scenarios preserve different counts.
+    """
+    repairs = sorted(
+        (
+            row
+            for row in world.store.get("activity_events", {}).values()
+            if row.get("user_id") == SANDBOX_USER
+            and row.get("event_type") == "plan_repaired"
+        ),
+        key=lambda row: row["created_at"],
+    )
+    if not repairs:
+        return None
+    payload = repairs[-1].get("payload") or {}
+    moved = payload.get("moved_block_count")
+    preserved_ids = payload.get("preserved_work_block_ids")
+    if not isinstance(moved, int) or not isinstance(preserved_ids, (list, tuple)):
+        return None
+    preserved = len(preserved_ids)
+    allocations = payload.get("allocations")
+    feasible = isinstance(allocations, (list, tuple)) and all(
+        not row.get("shortfall_minutes") for row in allocations
+    )
+    receipt = (
+        f"Meeting observed → conflict detected → {moved} block"
+        f"{'' if moved == 1 else 's'} moved, {preserved} preserved"
+    )
+    if feasible:
+        receipt += " → feasibility restored"
+    return receipt + ". Nobody clicked replan — the calendar change feed did."
 
 
 async def _play_advance(world: SandboxWorld, card: ActionCard) -> CardOutcome:
