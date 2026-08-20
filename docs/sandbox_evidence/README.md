@@ -4,6 +4,31 @@ Live security probes recorded after the interactive judge sandbox
 (`/sandbox`) was deployed. Kept separate from `docs/phase5_evidence/` so the
 phase 5 pack keeps describing only the phase 5 golden campaign.
 
+## `security_probes_20260820t040040.json` — 73/73 green
+
+Recorded 2026-08-20T04:00Z against
+`https://commitmentos-2hscowvydq-uw.a.run.app`, serving revision
+`commitmentos-00058-dtx` at 100% traffic — the revision carrying the
+round-2 and round-3 judge-feedback passes (deterministic sandbox
+explanations, proposal narrowing with fallback-cache TTL, ghost-block plan
+preview, matched-hold narration, guided completion step, genuine model
+metadata in evidence).
+
+All six groups green, same 73-probe matrix as the previous revision. The
+timed authored story on this revision also passed every acceptance gate:
+
+- **Conflict card 0.62 s** (was 4.82 s before the explanation decoupling) —
+  the repair response no longer waits on a live model call.
+- **The deadline-change card labeled `live`**: real Gemini output accepted
+  by the card contract via proposal narrowing (live call 2.79 s).
+- Matched-hold narration, preserved-plan narration, and the ghost-block
+  preview (3 proposed blocks, zero mutations before approval) all served
+  live; exactly one block moved in the repair with the rest preserved.
+- Evidence honesty held live: no simulated latency fields; genuine
+  `gemini-3.5-flash` model id with wall-clock latency (2,258 ms) projected
+  on the interpretation event; completion retained exactly the 60 verified
+  minutes.
+
 ## `security_probes_20260818t153546.json` — 73/73 green
 
 Recorded 2026-08-18T15:35Z against

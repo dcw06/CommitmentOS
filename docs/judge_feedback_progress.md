@@ -115,7 +115,9 @@ prompted this pass, on the prior revision).
 
 # Round 2 (2026-08-18): repair stall, fallback semantics, date clarity
 
-Status: source-complete; local verification green; owner deploy pending.
+Status: LIVE-VERIFIED on revision `commitmentos-00058-dtx` (2026-08-20) —
+probes 73/73, conflict card 0.62 s (was 4.82 s), deadline card labeled
+`live` via narrowing; see `docs/sandbox_evidence/README.md`.
 A second external review of `commitmentos-00055-ks8` prompted these
 diagnoses and fixes. No planner, policy, executor, or replay behavior
 changed.
@@ -199,7 +201,9 @@ a `recorded-fallback` sighting self-heals within the TTL.
 
 # Round 3 (2026-08-20): informed approval, honest narration, guided closure
 
-Status: source-complete; local verification green; owner deploy pending.
+Status: LIVE-VERIFIED on revision `commitmentos-00058-dtx` (2026-08-20) —
+ghost preview, matched-hold narration, and evidence honesty all confirmed
+on the serving revision; see `docs/sandbox_evidence/README.md`.
 A third review scored the submission 4.2/5 (architecture 4.6, demo
 readiness 3.8) and green-lit this final code cut. Declined by agreement:
 scenario unification (the two stories are deliberate — bridge sentence
