@@ -19,7 +19,7 @@ sections below).
 | 0 duplicate commitments · 0 duplicate Calendar events | Checkpointed inside every golden run above | both campaign revisions | 2026-08-15/17 |
 | Conflict-to-repair 7.2–10.2 s (mean 9.1 s) | Live deployed service, real Calendar conflict, warmed 15 s budget | `commitmentos-00042-fcj` | 2026-08-15 |
 | Byte-identical replay of every observation and action | Re-delivered inside all 20 golden runs above | both campaign revisions | 2026-08-15/17 |
-| 73/73 live security probes | Session/CSRF/OIDC matrices, full `/demo` mutation rejection, sandbox isolation | `commitmentos-00058-dtx` | 2026-08-20 |
+| 73/73 live security probes | Session/CSRF/OIDC matrices, full `/demo` mutation rejection, sandbox isolation | `commitmentos-00059-t4z` | 2026-08-20 |
 | 32/32 extraction eval, 100% every metric | Fixture suite over live Gemini, ~$0.0008/message | pre-deploy eval run | 2026-08-13 |
 
 ## Golden campaign: ten consecutive live runs, byte-identical replay
@@ -39,7 +39,8 @@ the record, not cleaned up.
 
 | Claim | Where it is proven |
 | --- | --- |
-| **73/73 probes green** on the currently serving revision: session negative matrix (12), CSRF on every controlled mutation route (15), wrong OIDC audience/identity on internal routes (6), `/demo` full read/mutation matrix (27), sandbox isolation — forged sessions, off-deck input, caller-defined identities, oversized messages, state-disallowed cards, cross-session invisibility (12), rate limit (1) | Revision `commitmentos-00058-dtx` (2026-08-20). [`sandbox_evidence/security_probes_20260820t040040.json`](sandbox_evidence/security_probes_20260820t040040.json), narrated in [`sandbox_evidence/README.md`](sandbox_evidence/README.md) |
+| **73/73 probes green** on the currently serving revision: session negative matrix (12), CSRF on every controlled mutation route (15), wrong OIDC audience/identity on internal routes (6), `/demo` full read/mutation matrix (27), sandbox isolation — forged sessions, off-deck input, caller-defined identities, oversized messages, state-disallowed cards, cross-session invisibility (12), rate limit (1) | Revision `commitmentos-00059-t4z` (2026-08-20). [`sandbox_evidence/security_probes_20260820t051512.json`](sandbox_evidence/security_probes_20260820t051512.json), narrated in [`sandbox_evidence/README.md`](sandbox_evidence/README.md) |
+| 73/73 probes green on the prior revision | Revision `commitmentos-00058-dtx` (2026-08-20). [`sandbox_evidence/security_probes_20260820t040040.json`](sandbox_evidence/security_probes_20260820t040040.json) |
 | 73/73 probes green on the prior sandbox revision | Revision `commitmentos-00055-ks8` (2026-08-18). [`sandbox_evidence/security_probes_20260818t153546.json`](sandbox_evidence/security_probes_20260818t153546.json) |
 | 70/70 probes green on the first sandbox revision | Revision `commitmentos-00048-4ft` (2026-08-18). [`sandbox_evidence/security_probes_20260818t030803.json`](sandbox_evidence/security_probes_20260818t030803.json) |
 | 61/61 probes green on the post-hardening gate revision | [`post_hardening_evidence/security_probes_20260817t043029.json`](post_hardening_evidence/security_probes_20260817t043029.json) |

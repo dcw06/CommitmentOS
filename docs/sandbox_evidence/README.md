@@ -4,6 +4,22 @@ Live security probes recorded after the interactive judge sandbox
 (`/sandbox`) was deployed. Kept separate from `docs/phase5_evidence/` so the
 phase 5 pack keeps describing only the phase 5 golden campaign.
 
+## `security_probes_20260820t051512.json` — 73/73 green
+
+Recorded 2026-08-20T05:15Z against
+`https://commitmentos-2hscowvydq-uw.a.run.app`, serving revision
+`commitmentos-00059-t4z` at 100% traffic — the final pre-freeze revision,
+adding the plan-repair receipt, explicit-closure copy, and terminal-risk
+presentation fix. Same 73-probe matrix, all six groups green.
+
+Live spot-check on the same revision: the conflict card returned in 0.62 s
+with the receipt derived from the actual `plan_repaired` payload ("Meeting
+observed → conflict detected → 1 block moved, 2 preserved → feasibility
+restored"). Production logs from the same window show both interpretation
+safety mechanisms operating: proposal narrowing accepted a live two-proposal
+response as `live`, and a transient provider failure produced an honestly
+labeled `recorded-fallback` that the ten-minute cache TTL retires.
+
 ## `security_probes_20260820t040040.json` — 73/73 green
 
 Recorded 2026-08-20T04:00Z against

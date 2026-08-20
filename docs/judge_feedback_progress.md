@@ -251,7 +251,9 @@ conflict card cover this).
 
 # Round 4 (2026-08-20): final micro-batch before the hard freeze
 
-Status: source-complete; local verification green; owner deploy pending.
+Status: LIVE-VERIFIED on revision `commitmentos-00059-t4z` (2026-08-20) —
+probes 73/73, receipt served from the real payload, conflict card 0.62 s.
+Code scope is now frozen.
 Two further reviews (both ~86/100) converged on evidence curation and three
 small polish defects. Scope after this batch is frozen: the remaining score
 gap is the real-account video, not code.
