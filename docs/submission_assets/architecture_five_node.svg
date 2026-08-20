@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="420" viewBox="0 0 1560 420" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#5b6575"/>
+    </marker>
+  </defs>
+
+  <rect width="1560" height="420" fill="#f6f7f9"/>
+
+  <text x="780" y="52" text-anchor="middle" font-size="26" font-weight="700" fill="#16202e">CommitmentOS — the commitment control loop</text>
+  <text x="780" y="80" text-anchor="middle" font-size="15" fill="#5b6575">Gemini interprets language once; everything consequential is deterministic, guarded, and audited</text>
+
+  <!-- Node 1: Observe -->
+  <g>
+    <rect x="40" y="130" width="256" height="170" rx="14" fill="#ffffff" stroke="#c9d4e3" stroke-width="1.5"/>
+    <rect x="40" y="130" width="256" height="6" rx="3" fill="#3b66d4"/>
+    <text x="168" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#16202e">Observe</text>
+    <text x="168" y="202" text-anchor="middle" font-size="13.5" fill="#3c4657">Gmail push · Calendar webhook</text>
+    <text x="168" y="224" text-anchor="middle" font-size="13.5" fill="#3c4657">named idempotent tasks —</text>
+    <text x="168" y="246" text-anchor="middle" font-size="13.5" fill="#3c4657">every signal replays to the</text>
+    <text x="168" y="268" text-anchor="middle" font-size="13.5" fill="#3c4657">same durable observation</text>
+  </g>
+  <line x1="296" y1="215" x2="352" y2="215" stroke="#5b6575" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Node 2: Interpret -->
+  <g>
+    <rect x="356" y="130" width="256" height="170" rx="14" fill="#ffffff" stroke="#c9d4e3" stroke-width="1.5"/>
+    <rect x="356" y="130" width="256" height="6" rx="3" fill="#7a4fd0"/>
+    <text x="484" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#16202e">Interpret</text>
+    <text x="484" y="202" text-anchor="middle" font-size="13.5" fill="#3c4657">Gemini 3.5 Flash reads the</text>
+    <text x="484" y="224" text-anchor="middle" font-size="13.5" fill="#3c4657">thread — every claim anchored</text>
+    <text x="484" y="246" text-anchor="middle" font-size="13.5" fill="#3c4657">to an exact quote, validated</text>
+    <text x="484" y="268" text-anchor="middle" font-size="13.5" fill="#3c4657">deterministically before use</text>
+  </g>
+  <line x1="612" y1="215" x2="668" y2="215" stroke="#5b6575" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Node 3: Plan -->
+  <g>
+    <rect x="672" y="130" width="256" height="170" rx="14" fill="#ffffff" stroke="#c9d4e3" stroke-width="1.5"/>
+    <rect x="672" y="130" width="256" height="6" rx="3" fill="#1d8a5f"/>
+    <text x="800" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#16202e">Plan</text>
+    <text x="800" y="202" text-anchor="middle" font-size="13.5" fill="#3c4657">deterministic portfolio planner</text>
+    <text x="800" y="224" text-anchor="middle" font-size="13.5" fill="#3c4657">reserves capacity before the</text>
+    <text x="800" y="246" text-anchor="middle" font-size="13.5" fill="#3c4657">deadline; stable block identity</text>
+    <text x="800" y="268" text-anchor="middle" font-size="13.5" fill="#3c4657">makes repairs minimal</text>
+  </g>
+  <line x1="928" y1="215" x2="984" y2="215" stroke="#5b6575" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Node 4: Policy / Outbox -->
+  <g>
+    <rect x="988" y="130" width="256" height="170" rx="14" fill="#ffffff" stroke="#c9d4e3" stroke-width="1.5"/>
+    <rect x="988" y="130" width="256" height="6" rx="3" fill="#c07f1f"/>
+    <text x="1116" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#16202e">Policy / Outbox</text>
+    <text x="1116" y="202" text-anchor="middle" font-size="13.5" fill="#3c4657">autonomy thresholds decide:</text>
+    <text x="1116" y="224" text-anchor="middle" font-size="13.5" fill="#3c4657">act, or stop and ask — intents</text>
+    <text x="1116" y="246" text-anchor="middle" font-size="13.5" fill="#3c4657">written transactionally, holdable</text>
+    <text x="1116" y="268" text-anchor="middle" font-size="13.5" fill="#3c4657">and resumable by the user</text>
+  </g>
+  <line x1="1244" y1="215" x2="1300" y2="215" stroke="#5b6575" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Node 5: Execute / Verify -->
+  <g>
+    <rect x="1304" y="130" width="256" height="170" rx="14" fill="#ffffff" stroke="#c9d4e3" stroke-width="1.5"/>
+    <rect x="1304" y="130" width="256" height="6" rx="3" fill="#b3413a"/>
+    <text x="1432" y="172" text-anchor="middle" font-size="21" font-weight="700" fill="#16202e">Execute / Verify</text>
+    <text x="1432" y="202" text-anchor="middle" font-size="13.5" fill="#3c4657">Calendar writes revalidate</text>
+    <text x="1432" y="224" text-anchor="middle" font-size="13.5" fill="#3c4657">revisions and etags (If-Match)</text>
+    <text x="1432" y="246" text-anchor="middle" font-size="13.5" fill="#3c4657">at the last instant; results</text>
+    <text x="1432" y="268" text-anchor="middle" font-size="13.5" fill="#3c4657">observed back and verified</text>
+  </g>
+
+  <!-- Feedback loop: Execute/Verify back to Observe -->
+  <path d="M 1432 300 L 1432 348 L 168 348 L 168 304" fill="none" stroke="#5b6575" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+  <rect x="620" y="332" width="320" height="32" rx="16" fill="#eef0f4"/>
+  <text x="780" y="353" text-anchor="middle" font-size="13.5" fill="#3c4657">every result is observed again — the loop closes</text>
+
+  <text x="780" y="398" text-anchor="middle" font-size="13" fill="#5b6575">Every decision lands on an audit timeline · Firestore is the sole durable truth · progress only advances on explicitly verified minutes</text>
+</svg>
