@@ -1,8 +1,18 @@
 # Demo video — final consolidated script and production plan (rev 4)
 
-Target runtime **3:55** (confirm the actual rule limit before recording — the
-"~4 minutes" figure is from our plan and reviews, not verified rule text).
-Also confirm: required hosting (YouTube public/unlisted?), captions.
+Target runtime **3:55**. RULES VERIFIED (Devpost page, 2026-08-20): the
+requirement is "**~ 4-min Demo video**" (approximate — no hard cutoff
+stated) containing the problem overview, the value proposition, the app in
+action, and — mandatory — a demonstration that "the backend is running on
+Google Cloud (ie: Google Cloud Console, Cloud Run dashboard, Vertex AI
+logs, URL of .run, etc)". This script satisfies that three ways: the
+`.run.app` address bar throughout the take, the Cloud Logging cutaway, and
+the Cloud Run console shot. No hosting/visibility rule is stated for the
+demo video itself (the public-not-unlisted rule applies to the BONUS
+content piece); public upload stays the safe default. The judging rubric
+asks verbatim for "a live, unedited demo … and visible proof it runs on
+Google Cloud" (Demo & Production Readiness, 30%). Deadline: Aug 31, 2026 @
+5:00pm PDT.
 
 Audience: judges with zero prior context. The one thing this video must do
 that nothing else can: **prove the real Gmail → Google Cloud → Calendar path
