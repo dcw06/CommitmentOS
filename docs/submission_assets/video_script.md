@@ -1,4 +1,4 @@
-# Demo video — final consolidated script and production plan (rev 2)
+# Demo video — final consolidated script and production plan (rev 4)
 
 Target runtime **3:55** (confirm the actual rule limit before recording — the
 "~4 minutes" figure is from our plan and reviews, not verified rule text).
@@ -21,11 +21,11 @@ credibility enhancer, not the story.
 
 | Time | Beat | Surface |
 | --- | --- | --- |
-| 0:00–0:20 | Hook + what it is | You / title card |
-| 0:20–2:45 | **THE CONTINUOUS TAKE** (order below; final-take budget ≤2:25) | Gmail, dashboard, Calendar |
-| 2:45–2:52 | Cloud Logging cutaway (three highlighted rows) | Cloud Logging |
-| 2:52–3:17 | Sandbox: live Gemini on a novel message | /sandbox (pre-staged) |
-| 3:17–3:45 | Five-node architecture + on-screen stat card | Diagram + Cloud Run console |
+| 0:00–0:22 | Hook + what it is (≤58 words, ~160 wpm) | You / title card |
+| 0:22–2:47 | **THE CONTINUOUS TAKE** (order below; final-take budget ≤2:25) | Gmail, dashboard, Calendar |
+| 2:47–2:54 | Cloud Logging cutaway (three highlighted rows) | Cloud Logging |
+| 2:54–3:19 | Sandbox: live Gemini on a novel message (precision claim as caption, not speech) | /sandbox (staged minutes before) |
+| 3:19–3:45 | Five-node architecture + on-screen stat card | Diagram + Cloud Run console |
 | 3:45–3:55 | Closing line + links | Title card |
 
 Inside the continuous take, in this order (the order is load-bearing):
@@ -48,23 +48,22 @@ Inside the continuous take, in this order (the order is load-bearing):
 
 ## Script
 
-### 0:00–0:20 — Hook + what it is
-*(You on camera or VO over your inbox, then title card. ~55 words — do not
-inflate; the demo carries the rest.)*
+### 0:00–0:22 — Hook + what it is
+*(You on camera or VO over your inbox, then title card. ≤58 words at a calm
+~160 wpm — do not inflate; the demo carries the rest.)*
 
-> "I promise things over email constantly — 'sure, I'll get you the deck by
-> Friday' — and then the promise just sits in my inbox. My calendar has no
-> idea the work exists.
+> "I promise things over email all the time — 'sure, I'll get you the deck
+> by Friday' — and then it just sits in my inbox. My calendar has no idea
+> the work exists.
 >
-> CommitmentOS finds those promises, books the work time on my Google
-> Calendar, and repairs the plan itself when things change. First: the
-> deployed system, running continuously against my real Gmail and
-> Calendar."
+> CommitmentOS finds those promises, books work time on my Calendar, and
+> repairs the plan itself when things change. First: the deployed system,
+> running continuously against my real Gmail and Calendar."
 >
 > *(This wording survives the split-take fallback — the "no cuts" claim
 > lives only in the caption over the actual continuous frames.)*
 
-### 0:20–2:45 — THE CONTINUOUS TAKE
+### 0:22–2:47 — THE CONTINUOUS TAKE
 *(One screen recording. Caption overlay spanning exactly the continuous
 frames: "one continuous take — real accounts, deployed service". Address bar
 visible. 110–125% browser zoom. Final-take budget ≤2:25.)*
@@ -76,19 +75,27 @@ show the inbox list)*
 > the date-math note)* "Watch the deadline — 'by [day]' — just human
 > language."
 
-**2. Candidate appears** *(dashboard tab; expect 10–30s: push +
-interpretation + 8s poll — narrate through it)*
-> "That message is being pushed to the agent right now… there. And notice:
-> it is NOT my commitment yet. It's a request, held as a candidate, with the
-> exact sentence it's based on. The agent won't invent obligations for me."
+**2. Candidate appears** *(dashboard Today tab; expect 10–30s: push +
+interpretation + 8s poll. If the wait runs long, use the filler line —
+never silence over a static screen.)*
+> "That message is being pushed to the agent right now…" *(filler if
+> needed: "…Gmail sends a change signal to the service on Cloud Run; the
+> agent fetches just that thread and reads it…")* "…there. And notice: it
+> is NOT my commitment yet — it's a request, held as a candidate."
+> *(CLICK INTO the candidate — its detail page shows the Source evidence
+> card)* "…with the exact sentence it's based on. The agent won't invent
+> obligations for me."
 
 **3. Accept by reply** *(my Gmail: "Yes, I'll take that on — you'll have it
-by [day] end of day." Back to dashboard.)*
+by [day] end of day." Back to the commitment DETAIL page — the evidence
+stays visible and the approval forms live here too.)*
 > "My reply updates the **same** commitment instead of creating another one
 > — one promise, one record, now mine."
 
-**4. Effort + plan approval** *(dashboard; effort field is blank — that's
-the point; type the minutes; brief planner wait before the plan card)*
+**4. Effort + plan approval** *(on the detail page; effort field is blank —
+that's the point; type the minutes; brief planner wait before the plan card.
+VERIFY IN REHEARSAL that both approvals surface on the detail page; fall
+back to Today's approval cards if not.)*
 > "It won't guess how long my work takes — I tell it: three hours. …It's
 > computing a plan against my real calendar right now… and here's its last
 > **setup** question: may I write to your calendar? After this, in-policy
@@ -136,7 +143,7 @@ moved/preserved counts and the latency FROM THE SCREEN, never from memory)*
 it: "And if I ever want it to stop — one switch pauses automatic action;
 anything in flight is held, not lost, and revalidated before it resumes.")*
 
-### 2:45–2:52 — Cloud Logging cutaway
+### 2:47–2:54 — Cloud Logging cutaway
 *(Separate ~7s clip. A visual receipt, not an explanation: the smallest
 credible view — three rows highlighted, timestamps aligned: webhook in →
 reconciliation → calendar write. PRE-SCRUB the visible log lines for email
@@ -144,23 +151,24 @@ addresses, ids, tokens, or query parameters before recording.)*
 > "Same story from Google Cloud's side — the webhook, the reconciliation,
 > the calendar write, seconds apart."
 
-### 2:52–3:17 — Sandbox: prove the AI is live
-*(Separate take. Session PRE-STAGED: free-play lane already chosen, subject
-already entered. On camera: type only the message, then expand the
-interpretation evidence.)*
+### 2:54–3:19 — Sandbox: prove the AI is live
+*(Separate take. Stage the session MINUTES before recording — sandbox
+worlds idle-expire and reads don't refresh the clock; a session staged in
+the morning will be dead by afternoon. Free-play lane chosen, subject
+entered. On camera: type only the message, then expand the interpretation
+evidence. The precision claim rides as an on-screen caption, not speech:
+"Same model · same prompt contract · isolated test data · no login".)*
 
 > "To show the interpretation happening live, I'll give the public sandbox
-> a message it has never seen. It runs the production interpretation path —
-> same model, same prompt contract — on a test world. No login, link below.
-> Here's a message I just made up…" *(type as
-> counterparty: "Could you send me the revised onboarding guide by next
-> Wednesday at 3pm?")* "…interpreted live by Gemini: there's the model, the
-> wall-clock latency, and the exact words it cited."
+> a message it has never seen…" *(type as counterparty: "Could you send me
+> the revised onboarding guide by next Wednesday at 3pm?")* "…interpreted
+> live by Gemini: there's the model, the wall-clock latency, and the exact
+> words it cited."
 
 *(If the label shows `recorded-fallback`: transient provider hiccup — wait
 ten minutes or reset, then re-record this segment.)*
 
-### 3:17–3:45 — Architecture + the stat card
+### 3:19–3:45 — Architecture + the stat card
 *(Five-node diagram `architecture_five_node.png`; the implementation nouns —
 idempotent tasks · transactional outbox · etag preconditions — appear as a
 caption strip, not speech. Then 2s of the Cloud Run console showing the
@@ -231,6 +239,22 @@ service + revision. STAT CARD on screen, scoped exactly:)*
 - Verify during rehearsal: completing the staged commitment does NOT shift
   the new commitment's blocks (preserve-then-allocate should hold them).
 
+## Overlay & asset inventory (produce BEFORE recording day)
+
+1. Opening title card (name + one-line tagline)
+2. Continuous-take caption: "one continuous take — real accounts, deployed
+   service"
+3. Completion overlay: "Separate commitment — completion integrity"
+4. Sandbox caption: "Same model · same prompt contract · isolated test
+   data · no login"
+5. Implementation-nouns strip (architecture beat): "Idempotent tasks ·
+   Transactional outbox · Etag preconditions"
+6. Stat card: "10 live end-to-end runs + 10 hardened seeded runs · 1,110
+   acceptance checks · 0 duplicate commitments or events · 73/73 security
+   probes · ~$0.0008 per message"
+7. Closing card: tagline + sandbox link, demo link, repo link (canonical
+   host)
+
 ## Recording notes
 
 - 1080p minimum, browser at 110–125% zoom (embedded players compress),
@@ -258,8 +282,9 @@ service + revision. STAT CARD on screen, scoped exactly:)*
   "someone books a meeting" while visibly dragging it yourself). A
   counterparty calendar invite is an UNTESTED conflict path — do not
   attempt it for the video.
-- "Nobody opened CommitmentOS — nobody clicked replan" (precise), never
-  "nobody opened an app" (a judge is looking at an open app).
+- The repair-trigger line is "I never clicked replan — the calendar change
+  itself triggered the repair" (states the mechanism); never "nobody opened
+  an app" or "nobody opened CommitmentOS" — the interface is visibly open.
 - Mechanisms, not absolutes: "etag preconditions reject stale writes," not
   "can never overwrite."
 - The stat card scopes the campaigns explicitly: 10 live end-to-end + 10
