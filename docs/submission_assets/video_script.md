@@ -57,8 +57,12 @@ inflate; the demo carries the rest.)*
 > idea the work exists.
 >
 > CommitmentOS finds those promises, books the work time on my Google
-> Calendar, and repairs the plan itself when things change. First: the real
-> deployed system, in one continuous take."
+> Calendar, and repairs the plan itself when things change. First: the
+> deployed system, running continuously against my real Gmail and
+> Calendar."
+>
+> *(This wording survives the split-take fallback — the "no cuts" claim
+> lives only in the caption over the actual continuous frames.)*
 
 ### 0:20–2:45 — THE CONTINUOUS TAKE
 *(One screen recording. Caption overlay spanning exactly the continuous
@@ -86,18 +90,20 @@ by [day] end of day." Back to dashboard.)*
 **4. Effort + plan approval** *(dashboard; effort field is blank — that's
 the point; type the minutes; brief planner wait before the plan card)*
 > "It won't guess how long my work takes — I tell it: three hours. …It's
-> computing a plan against my real calendar right now… and here's the second
-> and last question it asks: may I write to your calendar? After this,
-> in-policy repairs happen on their own." *(approve)*
+> computing a plan against my real calendar right now… and here's its last
+> **setup** question: may I write to your calendar? After this, in-policy
+> repairs happen on their own — and anything outside policy still comes
+> back to me." *(approve)*
 
 **5. Real Calendar** *(Calendar tab)*
 > "The blocks land here — real events, before the deadline, around
 > everything already on my calendar."
 
 **6. Completion beat** *(dashboard → the PRE-STAGED commitment; distinct
-title so the switch is visually unmistakable)*
-> "**Separately** — here's an older commitment, so I can show you how
-> completion works. One of its blocks elapsed this morning, and the agent
+title so the switch is visually unmistakable; overlay caption: "Separate
+commitment — completion integrity")*
+> "**Separately** — here's an older commitment, showing another control.
+> One of its blocks elapsed this morning, and the agent
 > did NOT assume the work happened. It's asking me. I log the 60 minutes I
 > actually did… remaining work drops by exactly 60. And when I mark it done
 > — it keeps my real number, and cancels the reserved time I no longer
@@ -106,10 +112,10 @@ title so the switch is visually unmistakable)*
 
 **7. Quiet window — the trust beat** *(expand the completion audit entry;
 ~20s, no calendar writes; point the cursor along the chain as you speak)*
-> "Everything it does lands on an audit timeline. This one entry: the input
-> it observed… the decision it made… the calendar action it wrote… all tied
-> together by one correlation id. You never have to take the agent's word
-> for what happened."
+> "Everything it does lands on an audit timeline. These entries connect the
+> input it observed… the decision it made… the calendar action it wrote…
+> and the verified result — under one correlation id. You never have to
+> take the agent's word for what happened."
 
 **8. THE CLIMAX — conflict → repair** *(Calendar tab: drag a new meeting
 directly onto a reserved block; hands off; count through it)*
@@ -117,9 +123,11 @@ directly onto a reserved block; hands off; count through it)*
 > time it reserved — the kind of thing a coworker does to your week. Hands
 > off now… *(wait; ~9s warmed)* …there. The agent noticed through the
 > calendar's own change feed, moved exactly that one block, and left the
-> others untouched. Nobody opened CommitmentOS. Nobody clicked replan."
+> others untouched. I never clicked replan — the calendar change itself
+> triggered the repair."
 
-**9. The receipt** *(dashboard Activity: expand plan_repaired)*
+**9. The receipt** *(dashboard Activity: expand plan_repaired; read the
+moved/preserved counts and the latency FROM THE SCREEN, never from memory)*
 > "And it can prove it: the planner run, the one moved block, the preserved
 > ones, the stable event identity — and the repair latency the system
 > measured on itself: [read the real number] seconds."
@@ -141,9 +149,10 @@ addresses, ids, tokens, or query parameters before recording.)*
 already entered. On camera: type only the message, then expand the
 interpretation evidence.)*
 
-> "Skeptical the AI is real? This public sandbox runs the production
-> interpretation path — same model, same prompt contract — on a test world.
-> No login, link below. Here's a message I just made up…" *(type as
+> "To show the interpretation happening live, I'll give the public sandbox
+> a message it has never seen. It runs the production interpretation path —
+> same model, same prompt contract — on a test world. No login, link below.
+> Here's a message I just made up…" *(type as
 > counterparty: "Could you send me the revised onboarding guide by next
 > Wednesday at 3pm?")* "…interpreted live by Gemini: there's the model, the
 > wall-clock latency, and the exact words it cited."
@@ -217,9 +226,8 @@ service + revision. STAT CARD on screen, scoped exactly:)*
   only if no take ever passes.
 - Two engineering failures → the **split fallback**: two continuous takes
   with the seam after beat 5 (Calendar view), each captioned honestly
-  ("continuous — no cuts") — never cut inside beats 8–9. The intro line
-  already scopes the claim to the workflow, so the split needs no re-record
-  of the intro.
+  ("continuous — no cuts") — never cut inside beats 8–9. The intro makes no
+  one-take claim at all, so the split needs no intro re-record.
 - Verify during rehearsal: completing the staged commitment does NOT shift
   the new commitment's blocks (preserve-then-allocate should hold them).
 
@@ -237,13 +245,15 @@ service + revision. STAT CARD on screen, scoped exactly:)*
 - Confirm monitoring active + actions enabled (mandatory if anything was
   toggled).
 - Revert `--min-instances` if desired.
-- Upload (unlisted YouTube unless rules say otherwise), test playback on a
-  cold browser, then put the link in Devpost and the LinkedIn post.
+- Upload **public** on YouTube (confirm the rules, but public is the safe
+  default for judging — an unlisted link risks a rule technicality), test
+  playback on a cold browser, then put the link in Devpost and the LinkedIn
+  post.
 
 ## Truthfulness guardrails (non-negotiable)
 
-- The "no cuts" caption spans exactly the frames that are continuous, and
-  the intro scopes the one-take claim to the core workflow only.
+- The "no cuts" caption spans exactly the frames that are continuous; the
+  spoken intro makes no one-take claim, so it stays true under the fallback.
 - Narrate what the viewer sees: YOU drop the conflicting meeting (don't say
   "someone books a meeting" while visibly dragging it yourself). A
   counterparty calendar invite is an UNTESTED conflict path — do not
@@ -259,3 +269,13 @@ service + revision. STAT CARD on screen, scoped exactly:)*
 - Read the repair latency number that actually appears on screen.
 - "Same model, same prompt contract" is the exact sandbox claim (production
   interpreter class and prompt on a sandbox-only key) — not "same system."
+- **One description per surface, used consistently everywhere:**
+
+  | Surface | Correct description |
+  | --- | --- |
+  | Real-account demo | Production service connected to real Gmail and Calendar |
+  | `/sandbox` | Public interactive environment — same model and prompt contract, isolated test data |
+  | `/demo` | Seeded, read-only product walkthrough |
+
+- The stat card carries the numbers; don't re-speak them — spoken narration
+  stays at the two-ideas-plus-pointer level.
