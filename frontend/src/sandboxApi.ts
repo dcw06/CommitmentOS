@@ -84,6 +84,16 @@ export interface SandboxApproval {
   normalizedOutcome: string | null;
   proposedDeadline: string | null;
   proposedDeadlineExpression: string | null;
+  proposedBlocks: SandboxProposedBlock[];
+}
+
+// A block inside a pending plan approval — it exists only in the approval
+// payload; nothing is on the calendar until the user approves.
+export interface SandboxProposedBlock {
+  workBlockId: string;
+  start: string;
+  end: string;
+  preserved: boolean;
 }
 
 export type SandboxOwnershipType =
@@ -126,6 +136,10 @@ export interface SandboxEvidenceProjection {
   preservedBlockCount?: number;
   plannerRunId?: string;
   plannerVersion?: string;
+  modelId?: string;
+  promptVersion?: string;
+  modelLatencyMs?: number;
+  validationErrorCodes?: string[];
   outboxActions?: SandboxOutboxEvidence[];
 }
 

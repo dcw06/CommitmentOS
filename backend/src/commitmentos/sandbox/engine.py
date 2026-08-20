@@ -219,10 +219,12 @@ async def _deliver_thread_message(
         if before[commitment_id] != after[commitment_id]
     }
     new_approvals = set(after_approvals) - set(before_approvals)
-    confirmation_paused = any(
-        after_approvals[approval_id]
-        in {"identity_confirmation", "deadline_change_confirmation"}
-        for approval_id in new_approvals
+    new_approval_types = {
+        after_approvals[approval_id] for approval_id in new_approvals
+    }
+    deadline_change_paused = "deadline_change_confirmation" in new_approval_types
+    confirmation_paused = bool(
+        new_approval_types & {"identity_confirmation", "deadline_change_confirmation"}
     )
     canceled = {
         commitment_id
@@ -248,6 +250,15 @@ async def _deliver_thread_message(
         detail = (
             "The explicit retraction canceled the existing commitment without "
             "creating another one."
+        )
+    elif deadline_change_paused:
+        # Identity resolution SUCCEEDED here — the proposal was bound to the
+        # existing commitment. What held it was policy: a counterparty cannot
+        # rewrite the user's deadline without explicit acceptance.
+        headline = "Matched to your commitment — the change waits for you"
+        detail = (
+            "The proposal matched the existing commitment, but the deadline "
+            "change was held for your approval."
         )
     elif confirmation_paused:
         headline = "The agent paused for confirmation before changing anything"
@@ -969,6 +980,18 @@ def _approval_view(world: SandboxWorld, row: dict[str, Any]) -> dict[str, Any]:
         "proposedDeadlineExpression": (proposal.get("deadline") or {}).get(
             "source_expression"
         ),
+        # The plan the user is being asked to authorize. These blocks exist
+        # only inside the pending approval payload — nothing is written to
+        # work_blocks, the outbox, or the calendar until the approval commits.
+        "proposedBlocks": [
+            {
+                "workBlockId": str(block.get("work_block_id") or ""),
+                "start": _iso(block.get("start")),
+                "end": _iso(block.get("end")),
+                "preserved": bool(block.get("preserved")),
+            }
+            for block in (payload.get("proposed_blocks") or ())
+        ],
     }
 
 
@@ -1007,10 +1030,14 @@ _EVIDENCE_PAYLOAD_FIELDS: tuple[tuple[str, str], ...] = (
     ("work_block_id", "workBlockId"),
     ("execution_status", "outboxStatus"),
     ("moved_block_count", "movedBlockCount"),
+    ("model_id", "modelId"),
+    ("prompt_version", "promptVersion"),
     # repair_latency_ms / decision_latency_ms are deliberately NOT projected:
     # the sandbox runs on a simulated clock, so those audit values compute to
     # ~0 and would read as a production measurement. The measured latencies
-    # live in the frozen evidence pack (docs/proof_index.md).
+    # live in the frozen evidence pack (docs/proof_index.md). Model latency is
+    # different — it is wall-clock, measured by the client around the actual
+    # call — and is projected below only when a call actually happened.
 )
 
 _EVIDENCE_ACTION_LIMIT = 6
@@ -1028,6 +1055,14 @@ def _evidence_projection(
     preserved = payload.get("preserved_work_block_ids")
     if isinstance(preserved, (list, tuple)):
         evidence["preservedBlockCount"] = len(preserved)
+    # Wall-clock model latency, only for a call that actually happened —
+    # recorded interpretations carry 0 and are identified by modelId instead.
+    latency = payload.get("latency_ms")
+    if isinstance(latency, int) and latency > 0:
+        evidence["modelLatencyMs"] = latency
+    error_codes = payload.get("error_codes")
+    if isinstance(error_codes, (list, tuple)) and error_codes:
+        evidence["validationErrorCodes"] = [str(code) for code in error_codes][:8]
     planner_run_id = payload.get("planner_run_id")
     if planner_run_id:
         evidence["plannerRunId"] = str(planner_run_id)

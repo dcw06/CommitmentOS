@@ -696,7 +696,8 @@ class TestSandboxFlow:
         )
         assert approval["proposedDeadline"] < before["deadline"]
 
-        assert "no commitment revision was claimed" in proposed["thread"][-1]["note"]
+        assert "held for your approval" in proposed["thread"][-1]["note"]
+        assert "matched the existing commitment" in proposed["thread"][-1]["note"]
         await _approve(session, "deadline_change_confirmation")
         after = (await engine.render(session))["commitments"][0]
 
@@ -780,7 +781,7 @@ class TestSandboxFlow:
         first_view = await engine.render(first)
 
         assert outcome.headline == (
-            "The agent paused for confirmation before changing anything"
+            "Matched to your commitment — the change waits for you"
         )
         assert first_view["interpretationSource"] == "recorded-fallback"
         assert len(first_view["commitments"]) == 1
@@ -908,6 +909,10 @@ ALLOWED_EVIDENCE_KEYS = {
     "preservedBlockCount",
     "plannerRunId",
     "plannerVersion",
+    "modelId",
+    "promptVersion",
+    "modelLatencyMs",
+    "validationErrorCodes",
     "outboxActions",
 }
 ALLOWED_ACTION_KEYS = {
@@ -1124,6 +1129,87 @@ class TestInterpreterBoundaries:
         )
         assert text == "One block moved; four preserved."
         assert metadata.model_id == DETERMINISTIC_EXPLANATION_MODEL_ID
+
+    async def test_plan_preview_exists_before_any_mutation(self, store) -> None:  # noqa: ANN001
+        """Approving must be informed: the proposed blocks are visible while
+        nothing has been written to work blocks, the outbox, or the calendar."""
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+
+        view = await engine.render(session)
+        approval = next(
+            row
+            for row in view["approvals"]
+            if row["requestType"] == "initial_plan_approval"
+        )
+        assert len(approval["proposedBlocks"]) == 3
+        for block in approval["proposedBlocks"]:
+            assert block["start"] and block["end"]
+        assert view["blocks"] == [], "work blocks exist before approval"
+        assert session.world.store.get("action_outbox", {}) == {}, (
+            "outbox actions exist before approval"
+        )
+        assert not session.world.calendar.live_events(), (
+            "calendar events exist before approval"
+        )
+
+        await _approve(session, "initial_plan_approval")
+        after = await engine.render(session)
+        assert {row["start"] for row in after["blocks"]} == {
+            block["start"] for block in approval["proposedBlocks"]
+        }, "approved blocks differ from the previewed proposal"
+        assert not any(row["proposedBlocks"] for row in after["approvals"])
+
+    async def test_deadline_hold_narration_says_identity_matched(
+        self, store
+    ) -> None:  # noqa: ANN001
+        session = store.create()
+        await _play(session, "msg_request", store)
+        await _play(session, "msg_accept", store)
+        await _approve(session, "effort_confirmation", confirmed_minutes=180)
+        await _approve(session, "initial_plan_approval")
+
+        outcome = await _play(session, "msg_deadline_change", store)
+        assert "matched the existing commitment" in outcome.detail
+        assert "held for your approval" in outcome.detail
+        assert "did not clear" not in outcome.detail
+
+    async def test_model_metadata_is_projected_only_when_genuine(self) -> None:
+        """FakeModelInterpreter reports latency 7 ms; recorded results report 0
+        and must not surface a latency at all."""
+        live = FakeModelInterpreter()
+        live.script(_recorded("msg_request"))
+        live_store = SandboxSessionStore(live_interpreter=live)
+        session = live_store.create()
+        await _play(session, "msg_request", live_store)
+        interpretation_events = [
+            row["evidence"]
+            for row in (await engine.render(session))["activity"]
+            if row["eventType"] == "interpretation_created"
+            and row["evidence"].get("modelId")
+        ]
+        assert any(
+            row["modelId"] == "fake-gemini" and row["modelLatencyMs"] == 7
+            for row in interpretation_events
+        ), interpretation_events
+
+        recorded_store = SandboxSessionStore(live_interpreter=None)
+        recorded_session = recorded_store.create()
+        await _play(recorded_session, "msg_request", recorded_store)
+        recorded_events = [
+            row["evidence"]
+            for row in (await engine.render(recorded_session))["activity"]
+            if row["eventType"] == "interpretation_created"
+            and row["evidence"].get("modelId")
+        ]
+        assert recorded_events, "no interpretation metadata projected"
+        for row in recorded_events:
+            assert row["modelId"] == "recorded-interpretation"
+            assert "modelLatencyMs" not in row, (
+                "a zero-latency recorded result must not display a latency"
+            )
 
     async def test_fallback_cache_entries_expire_but_live_entries_stay(self) -> None:
         now = [0.0]

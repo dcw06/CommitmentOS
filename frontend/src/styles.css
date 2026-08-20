@@ -1158,6 +1158,31 @@ body:has(.sandbox) main {
   color: var(--danger);
 }
 
+.calendar-entry.proposed {
+  background: transparent;
+  border: 1.5px dashed #8ba7e8;
+  color: #1b3d8f;
+  opacity: 0.85;
+}
+
+.sandbox-proposed-blocks {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+}
+
+.sandbox-proposed-blocks p {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+}
+
+.sandbox-proposed-blocks ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .sandbox-activity {
   list-style: none;
   margin: 0;

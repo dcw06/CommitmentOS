@@ -128,11 +128,11 @@ function tourStep(state: SandboxState): TourStep {
   const approval = state.approvals[0];
   const awaiting = state.blocks.some((block) => block.executionState === "awaiting_check_in");
   const planned = state.blocks.some((block) => block.executionState === "planned");
-  const needsExplicitClosure = state.commitments.some(
+  const openCommitment = state.commitments.some(
     (commitment) =>
       !["completed", "dismissed", "canceled"].includes(
         commitment.lifecycleStatus,
-      ) && commitment.remainingMinutes === 0,
+      ),
   );
   const conflictAvailable = state.cards.some(
     (card) => card.card_id === "event_conflict" && card.available,
@@ -243,15 +243,6 @@ function tourStep(state: SandboxState): TourStep {
         "and watch the remaining work fall by exactly that much.",
     };
   }
-  if (needsExplicitClosure) {
-    return {
-      step: 9,
-      title: "Close the commitment explicitly",
-      body:
-        "All confirmed effort is now verified. Use Mark complete to close " +
-        "the commitment with explicit completion evidence.",
-    };
-  }
   if (state.cards.some((card) => card.available)) {
     return {
       step: 8,
@@ -261,16 +252,30 @@ function tourStep(state: SandboxState): TourStep {
         "reacts to each one the same way it would to the real thing.",
     };
   }
+  if (openCommitment) {
+    // Every card is played but the commitment is still open: closing it is
+    // part of the loop, not an afterthought.
+    return {
+      step: 9,
+      title: "Close the commitment explicitly",
+      body:
+        "One step remains: completion is an explicit decision, never " +
+        "inferred. Use Mark complete — it keeps exactly the minutes you " +
+        "verified and cancels the remaining reserved blocks.",
+    };
+  }
   return {
-    step: 9,
+    step: 10,
     title: "That is the whole loop",
     body:
       "Extraction from real language, an explicit confirmation boundary, a " +
-      "plan on your calendar, an autonomous repair when reality moved, and " +
-      "honest progress. Reset to run it again, or open the dashboard to see " +
-      "the same system on seeded demonstration data. The production " +
-      "evidence this sandbox cannot show — replay, live security probes, " +
-      "measured repair latency — is indexed in the repository:",
+      "plan on your calendar, an autonomous repair when reality moved, " +
+      "honest progress, and an explicit close. Reset to run it again, or " +
+      "open the dashboard — it shows the measured golden scenario, " +
+      "deliberately a different story from this one, because the agent is " +
+      "not hard-coded to a single thread. The production evidence this " +
+      "sandbox cannot show — replay, live security probes, measured repair " +
+      "latency — is indexed in the repository:",
     link: {
       href: "https://github.com/dcw06/CommitmentOS/blob/main/docs/proof_index.md",
       label: "Measured proof index",
@@ -555,6 +560,19 @@ export function ApprovalPanel({
             : ""}
         </p>
       ) : null}
+      {approval.proposedBlocks.length > 0 ? (
+        <div className="sandbox-proposed-blocks">
+          <p>Approving reserves exactly these blocks — nothing is written yet:</p>
+          <ul>
+            {approval.proposedBlocks.map((block) => (
+              <li key={block.workBlockId}>
+                {scenarioDay(block.start)}, {scenarioRange(block.start, block.end)}
+                {block.preserved ? " (unchanged)" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {approval.reason ? (
         <p className="sandbox-approval-context">
           Why it stopped: {APPROVAL_REASON_COPY[approval.reason] ?? approval.reason.replaceAll("_", " ")}
@@ -675,7 +693,22 @@ const DAY_START = 8;
 const DAY_END = 19;
 
 function CalendarPanel({ state }: { state: SandboxState }) {
+  // Blocks inside a pending plan approval render as ghosts: the judge sees
+  // exactly what approving would reserve, before anything is written.
+  const proposed = state.approvals
+    .filter((approval) => approval.requestType === "initial_plan_approval")
+    .flatMap((approval) =>
+      approval.proposedBlocks.map((block) => ({
+        key: `proposed-${block.workBlockId}`,
+        kind: "proposed",
+        label: approval.commitmentTitle ?? "Proposed block",
+        sub: "proposed · not reserved yet",
+        start: block.start,
+        end: block.end,
+      })),
+    );
   const entries = [
+    ...proposed,
     ...state.blocks.map((block) => ({
       key: block.workBlockId,
       kind: `block state-${block.executionState}`,
@@ -837,6 +870,10 @@ const EVIDENCE_FIELD_LABELS: [keyof SandboxEvidenceProjection, string][] = [
   ["outboxStatus", "outbox status"],
   ["movedBlockCount", "moved blocks"],
   ["preservedBlockCount", "preserved blocks"],
+  ["modelId", "model id"],
+  ["promptVersion", "prompt version"],
+  ["modelLatencyMs", "model latency (ms, wall-clock)"],
+  ["validationErrorCodes", "validation errors"],
 ];
 
 // Event-specific disclosure labels, so thirty identical summaries become a

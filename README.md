@@ -89,7 +89,11 @@ and action results continue through new durable observations.
 
 ## Judge mode
 
-Two zero-login surfaces, neither of which touches live data.
+Two zero-login surfaces, neither of which touches live data. They
+deliberately tell **different stories**: `/demo` mirrors the measured golden
+scenario the live evidence was earned on, while `/sandbox` runs a separately
+authored thread (plus free play) — so the proofs reinforce each other without
+the agent being hard-coded to a single conversation.
 
 **`/sandbox` — drive it yourself.** Choose one of two isolated lanes per reset:
 the authored end-to-end story, or a free-play email thread with a visible

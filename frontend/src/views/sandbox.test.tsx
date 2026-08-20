@@ -26,6 +26,7 @@ function missingDeadlineApproval(): SandboxApproval {
     normalizedOutcome: "Prepare the meeting notes",
     proposedDeadline: null,
     proposedDeadlineExpression: null,
+    proposedBlocks: [],
   };
 }
 

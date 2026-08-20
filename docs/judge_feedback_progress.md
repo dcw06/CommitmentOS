@@ -194,3 +194,50 @@ Deploy via the release gate, then rerun the security probes and re-time the
 conflict card on the new revision (expect ~1 s, matching the other
 actions). The deadline card should now label `live` on most fresh sessions;
 a `recorded-fallback` sighting self-heals within the TTL.
+
+---
+
+# Round 3 (2026-08-20): informed approval, honest narration, guided closure
+
+Status: source-complete; local verification green; owner deploy pending.
+A third review scored the submission 4.2/5 (architecture 4.6, demo
+readiness 3.8) and green-lit this final code cut. Declined by agreement:
+scenario unification (the two stories are deliberate — bridge sentence
+added to the README and the guided conclusion instead) and a sandbox
+pause/hold/resume card (shown on the real dashboard in the video instead).
+
+- **Ghost-block plan preview.** The `initial_plan_approval` payload always
+  carried `proposed_blocks`; the sandbox now exposes them
+  (`proposedBlocks`) and renders dashed "proposed · not reserved yet"
+  calendar entries plus a slot list on the approval card ("Approving
+  reserves exactly these blocks — nothing is written yet"). Pinned by test:
+  before approval there are zero work blocks, zero outbox actions, and zero
+  calendar events; the approved blocks equal the previewed ones.
+- **Deadline-change narration fixed.** Identity resolution succeeds on that
+  card — the old copy ("did not clear the deterministic identity or policy
+  boundary") undersold it. A held deadline change now says: "The proposal
+  matched the existing commitment, but the deadline change was held for
+  your approval." Identity confirmations keep the boundary copy.
+- **Guided completion is now the tour's explicit step 9.** The old final
+  step fired on `remaining === 0`, which the 60-of-180 story never reaches,
+  so "That is the whole loop" appeared while "Mark complete" still sat
+  outside the sequence. The tour now routes to explicit closure whenever
+  the deck is exhausted and a commitment is open; "whole loop" (step 10)
+  renders only after terminal completion.
+- **Genuine model metadata in evidence.** `interpretation_created` audit
+  payloads already carry sanitized `model_id`, `prompt_version`, and
+  client-measured wall-clock `latency_ms`; `interpretation_rejected`
+  carries `error_codes`. These are now projected — with `modelLatencyMs`
+  shown only when a call actually happened (> 0), so a recorded result is
+  identified by `recorded-interpretation` and never displays a latency.
+  Nothing is synthesized.
+
+Local verification: 328 backend tests (+3), ruff clean, frontend builds,
+vitest 3 green, Chromium audit 18/18 (ghosts before/absent after approval,
+no pre-approval mutation, narration copy, completion-step tour gating,
+model metadata honesty, dated demo, 390 px, zero console errors).
+
+Owner action: deploy via the release gate, rerun the probe suite, and
+verify on the live revision that the guided story still performs exactly
+one minimal conflict repair (the probes' authored story plus a timed
+conflict card cover this).
