@@ -251,7 +251,11 @@ service + revision. STAT CARD on screen, scoped exactly:)*
 
 ## Overlay & asset inventory (produce BEFORE recording day)
 
-1. Opening title card (name + one-line tagline)
+0. **PRODUCED** — intro slides 1–3 (`intro_slide_{1,2,3}.png`, 2x/1080p),
+   timed to the intro narration: split-screen problem ("The promise exists.
+   The time doesn't.") → name + Finds/Books/Repairs → "What you are about
+   to see" transition. Slide 2 doubles as the opening title card.
+1. Opening title card — covered by intro slide 2
 2. Continuous-take caption: "one continuous take — real accounts, deployed
    service"
 3. Completion overlay: "Separate commitment — completion integrity"

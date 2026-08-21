@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1920" height="1080" fill="#f6f7f9"/>
+
+  <!-- Left panel: the email -->
+  <g>
+    <rect x="130" y="200" width="750" height="580" rx="18" fill="#ffffff" stroke="#c9d4e3" stroke-width="2"/>
+    <text x="170" y="262" font-size="26" fill="#5b6575" letter-spacing="2">EMAIL — TUESDAY, 9:14 AM</text>
+    <line x1="170" y1="288" x2="840" y2="288" stroke="#e2e7ee" stroke-width="2"/>
+
+    <text x="170" y="345" font-size="30" font-weight="700" fill="#16202e">You</text>
+    <text x="234" y="345" font-size="28" fill="#5b6575">— re: platform review</text>
+
+    <text x="170" y="420" font-size="32" fill="#3c4657">Thanks for the context!</text>
+
+    <rect x="158" y="465" width="660" height="130" rx="10" fill="#fff3c4"/>
+    <text x="180" y="518" font-size="36" font-weight="600" fill="#16202e">“Sure — I’ll get you the deck</text>
+    <text x="180" y="568" font-size="36" font-weight="600" fill="#16202e">by Friday.”</text>
+
+    <text x="170" y="660" font-size="32" fill="#3c4657">Talk soon,</text>
+    <text x="170" y="704" font-size="32" fill="#3c4657">Me</text>
+  </g>
+
+  <!-- Right panel: the empty calendar -->
+  <g>
+    <rect x="1040" y="200" width="750" height="580" rx="18" fill="#ffffff" stroke="#c9d4e3" stroke-width="2"/>
+    <text x="1080" y="262" font-size="26" fill="#5b6575" letter-spacing="2">MY CALENDAR — THIS WEEK</text>
+    <line x1="1080" y1="288" x2="1750" y2="288" stroke="#e2e7ee" stroke-width="2"/>
+
+    <!-- Day columns -->
+    <g font-size="24" fill="#5b6575" text-anchor="middle">
+      <text x="1147" y="330">Mon</text>
+      <text x="1281" y="330">Tue</text>
+      <text x="1415" y="330">Wed</text>
+      <text x="1549" y="330">Thu</text>
+      <text x="1683" y="330">Fri</text>
+    </g>
+    <g stroke="#e2e7ee" stroke-width="1.5">
+      <line x1="1214" y1="345" x2="1214" y2="750"/>
+      <line x1="1348" y1="345" x2="1348" y2="750"/>
+      <line x1="1482" y1="345" x2="1482" y2="750"/>
+      <line x1="1616" y1="345" x2="1616" y2="750"/>
+    </g>
+
+    <!-- Meetings (gray), no work time anywhere -->
+    <g font-size="20" fill="#5b6575">
+      <rect x="1090" y="360" width="115" height="70" rx="8" fill="#e8ebf0"/>
+      <text x="1102" y="402">Meeting</text>
+      <rect x="1090" y="560" width="115" height="70" rx="8" fill="#e8ebf0"/>
+      <text x="1102" y="602">1:1</text>
+      <rect x="1224" y="430" width="115" height="90" rx="8" fill="#e8ebf0"/>
+      <text x="1236" y="480">Standup</text>
+      <rect x="1358" y="380" width="115" height="70" rx="8" fill="#e8ebf0"/>
+      <text x="1370" y="422">Review</text>
+      <rect x="1358" y="620" width="115" height="70" rx="8" fill="#e8ebf0"/>
+      <text x="1370" y="662">Sync</text>
+      <rect x="1492" y="470" width="115" height="90" rx="8" fill="#e8ebf0"/>
+      <text x="1504" y="520">Planning</text>
+      <rect x="1626" y="400" width="115" height="70" rx="8" fill="#e8ebf0"/>
+      <text x="1638" y="442">All-hands</text>
+    </g>
+
+    <!-- The deadline marker on Friday, with nothing reserved before it -->
+    <rect x="1626" y="640" width="115" height="60" rx="8" fill="none" stroke="#b3413a" stroke-width="2.5" stroke-dasharray="8 6"/>
+    <text x="1642" y="676" font-size="20" font-weight="600" fill="#b3413a">Deck due</text>
+  </g>
+
+  <!-- Caption -->
+  <text x="960" y="900" text-anchor="middle" font-size="54" font-weight="700" fill="#16202e">The promise exists. The time doesn’t.</text>
+</svg>

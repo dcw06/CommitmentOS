@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1920" height="1080" fill="#f6f7f9"/>
+
+  <text x="960" y="400" text-anchor="middle" font-size="130" font-weight="800" fill="#16202e">Commitment<tspan fill="#2b4fbf">OS</tspan></text>
+  <text x="960" y="490" text-anchor="middle" font-size="44" fill="#5b6575">Email promises → protected work plans</text>
+
+  <!-- Finds -->
+  <g>
+    <circle cx="560" cy="700" r="76" fill="#ffffff" stroke="#3b66d4" stroke-width="4"/>
+    <rect x="516" y="672" width="88" height="58" rx="8" fill="none" stroke="#3b66d4" stroke-width="5"/>
+    <path d="M 516 680 L 560 712 L 604 680" fill="none" stroke="#3b66d4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="560" y="850" text-anchor="middle" font-size="42" font-weight="700" fill="#16202e">Finds</text>
+    <text x="560" y="898" text-anchor="middle" font-size="27" fill="#5b6575">the promises in your email</text>
+  </g>
+
+  <line x1="700" y1="700" x2="810" y2="700" stroke="#5b6575" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 810 700 l -18 -11 v 22 z" fill="#5b6575"/>
+
+  <!-- Books -->
+  <g>
+    <circle cx="960" cy="700" r="76" fill="#ffffff" stroke="#1d8a5f" stroke-width="4"/>
+    <rect x="918" y="664" width="84" height="76" rx="8" fill="none" stroke="#1d8a5f" stroke-width="5"/>
+    <line x1="918" y1="688" x2="1002" y2="688" stroke="#1d8a5f" stroke-width="5"/>
+    <rect x="932" y="700" width="34" height="26" rx="4" fill="#1d8a5f"/>
+    <text x="960" y="850" text-anchor="middle" font-size="42" font-weight="700" fill="#16202e">Books</text>
+    <text x="960" y="898" text-anchor="middle" font-size="27" fill="#5b6575">work time on your Calendar</text>
+  </g>
+
+  <line x1="1100" y1="700" x2="1210" y2="700" stroke="#5b6575" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 1210 700 l -18 -11 v 22 z" fill="#5b6575"/>
+
+  <!-- Repairs -->
+  <g>
+    <circle cx="1360" cy="700" r="76" fill="#ffffff" stroke="#c07f1f" stroke-width="4"/>
+    <path d="M 1322 686 a 40 40 0 1 1 10 44" fill="none" stroke="#c07f1f" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 1330 742 l -14 -6 l 4 18 z" fill="#c07f1f"/>
+    <text x="1360" y="850" text-anchor="middle" font-size="42" font-weight="700" fill="#16202e">Repairs</text>
+    <text x="1360" y="898" text-anchor="middle" font-size="27" fill="#5b6575">the plan when reality changes</text>
+  </g>
+</svg>

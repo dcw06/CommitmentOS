@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1920" height="1080" fill="#f6f7f9"/>
+
+  <text x="960" y="300" text-anchor="middle" font-size="40" fill="#5b6575" letter-spacing="3">WHAT YOU ARE ABOUT TO SEE</text>
+
+  <g font-size="56" font-weight="700" fill="#16202e">
+    <circle cx="640" cy="465" r="14" fill="#3b66d4"/>
+    <text x="700" y="485">The deployed service on Google Cloud</text>
+    <circle cx="640" cy="600" r="14" fill="#b3413a"/>
+    <text x="700" y="620">My real Gmail</text>
+    <circle cx="640" cy="735" r="14" fill="#1d8a5f"/>
+    <text x="700" y="755">My real Calendar</text>
+  </g>
+
+  <text x="960" y="920" text-anchor="middle" font-size="42" fill="#5b6575">Watch it run.</text>
+</svg>
