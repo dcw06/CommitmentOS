@@ -39,7 +39,7 @@
   </defs>
 
   <rect width="1600" height="1200" fill="#ffffff"/>
-  <text x="50" y="47" class="title">CommitmentOS P0 Architecture — Signal-to-Observation Control Loop</text>
+  <text x="50" y="47" class="title">CommitmentOS Architecture — Signal-to-Observation Control Loop</text>
   <text x="50" y="76" class="subtitle">Pub/Sub carries Gmail signals only; Cloud Tasks carries bounded synchronization, reconciliation, and execution.</text>
 
   <rect x="1110" y="17" width="440" height="78" class="note"/>

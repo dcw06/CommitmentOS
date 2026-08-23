@@ -16,6 +16,10 @@ policy, idempotency, and every Calendar mutation.
 
 Built for the **All Things Agentic Hackathon** (Taskmaster track).
 
+**Measured evidence:** every performance and reliability claim in this
+README is indexed to the exact Cloud Run revision that produced it in
+[`docs/proof_index.md`](docs/proof_index.md).
+
 ## What it does
 
 - **Watches Gmail** for commitments you make ("I'll have it back before our
@@ -184,7 +188,7 @@ uv sync
 cp .env.example .env        # then fill in your project's values
                             # (every variable maps 1:1 to bootstrap/settings.py)
 
-# 3. Tests — 304 tests over the in-memory Firestore twin; no cloud access
+# 3. Tests — 328 tests over the in-memory Firestore twin; no cloud access
 uv run pytest
 
 # 4. Frontend

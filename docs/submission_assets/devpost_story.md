@@ -18,7 +18,7 @@ loop, not a one-shot planner.
 
 | Layer | Component |
 | --- | --- |
-| Signals | Gmail push (Pub/Sub) + authenticated Calendar webhook → durable observations on Cloud Tasks (named, idempotent) |
+| Signals | Gmail push (Pub/Sub) + authenticated Calendar webhook → named, idempotent Cloud Tasks; workers persist durable observations in Firestore |
 | Interpretation | Gemini 3.5 Flash inside an ADK workflow (`commitment_interpretation_v2`) — evidence-quoted, deterministically validated before use |
 | Identity | Deterministic resolver: requests ≠ commitments; an acceptance reply updates the same record |
 | Planning | Deterministic portfolio planner (`stable-slot-score-v1`) — stable block identity makes repairs minimal |
