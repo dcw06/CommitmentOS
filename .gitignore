@@ -16,6 +16,9 @@ htmlcov/
 node_modules/
 frontend/dist/
 
+# Superseded planning drafts — kept locally, out of the published repo
+Planning Stage/
+
 # OS / editor
 .DS_Store
 
