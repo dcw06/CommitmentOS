@@ -34,11 +34,12 @@ Each reconciliation run is a tightly controlled **ADK graph call** with two hone
 
 | Route class | Trust contract |
 |---|---|
-| `/app`, `/api/v1/*` | Google OAuth login (controlled account allowlist) → opaque server-side session cookie; CSRF token on every mutation |
-| `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | Google-signed OIDC: exact audience + per-group service-account identity; Gmail change signals are durably rate-limited |
-| Calendar webhook | High-entropy channel token (constant-time hash compare) + channel/resource mapping + active overlap status + stored expiry + durable per-channel rate limit |
-| `/demo` | Read-only seeded judge mode; static data, no Firestore/credential path, every mutation method rejected |
-| `/sandbox` | Interactive judge sandbox; unauthenticated by design. Its state and every mutation port are in-memory twins; its sole external edge is a no-tools Gemini adapter with a distinct sandbox key/client/quota pool. No Firestore client, controlled-user credential/document, or production interpreter is reachable. Session addressed by explicit header (no ambient authority); mutually exclusive guided/free-play lanes; concurrent worlds, creation rate, idle/absolute lifetime, message length, per-session use, rolling traffic/model calls, concurrency, deadlines, and guided cache all capped |
+| `/app`, `/api/v1/*` | Access is allowed only for users who sign in with Google OAuth and are on the approved account list. Once logged in, you get a secure, server-side session cookie. Every action that changes data must include a special CSRF token for extra protection. |
+| `/internal/tasks/*`, `/internal/scheduler/*`, `/internal/pubsub/*` | These internal routes only accept requests carrying Google-signed OIDC tokens. Each token must match the exact intended audience and the correct service account group. Gmail change notifications are strictly rate-limited and stored safely.
+ |
+| Calendar webhook | This route is protected by a complex, hard-to-guess channel token that’s checked securely. Each incoming webhook is matched to its correct channel and resource, with status, overlap, and expiry all tracked. Every channel has its own reliable rate limit to prevent abuse. |
+| `/demo` | The demo route is strictly read-only. It uses pre-seeded, static data and never connects to Firestore or any credentials. Any attempt to make changes is always rejected. |
+| `/sandbox` | The sandbox is fully interactive and intentionally open, with no login required. All its data and every change are kept in memory only, separate from real accounts. The only outside connection is to Gemini, using a special sandbox key and quota. There’s no way to reach production data or credentials. Sessions are identified with explicit headers, not default permissions. You can pick between guided and free-play modes, and there are clear limits on the number of sessions, their lifetime, message length, concurrent use, and more, to keep it safe and fair. |
 
 ### Stack
 
