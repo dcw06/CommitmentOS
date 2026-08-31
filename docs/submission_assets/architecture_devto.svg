@@ -1,0 +1,712 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1180" viewBox="0 0 1760 1180" role="img" aria-labelledby="title desc">
+  <title id="title">CommitmentOS — Architecture</title>
+  <desc id="desc">A control-loop architecture diagram showing Gmail and Google Calendar feeding a five-stage CommitmentOS service on Cloud Run, with Gemini for interpretation, Firestore for durable state, Cloud Tasks for durable steps, human authority, and a periodic safety sweep.</desc>
+
+  <defs>
+    <style>
+      text { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .ink { fill: #132036; }
+      .muted { fill: #56657a; }
+      .eyebrow { font-size: 13px; font-weight: 800; letter-spacing: 1.15px; }
+      .card-title { font-size: 22px; font-weight: 760; fill: #132036; }
+      .body { font-size: 14px; fill: #56657a; }
+      .note { font-size: 14px; font-style: italic; }
+      .stage-title { font-size: 21px; font-weight: 760; fill: #132036; }
+      .primary-line { fill: none; stroke: #44516a; stroke-width: 2.5; }
+      .dash { fill: none; stroke-width: 2.5; stroke-dasharray: 8 7; }
+    </style>
+
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="155%">
+      <feDropShadow
+        dx="0"
+        dy="8"
+        stdDeviation="12"
+        flood-color="#1f2a44"
+        flood-opacity="0.10"
+      />
+    </filter>
+
+    <filter id="softShadow" x="-15%" y="-20%" width="130%" height="145%">
+      <feDropShadow
+        dx="0"
+        dy="5"
+        stdDeviation="8"
+        flood-color="#1f2a44"
+        flood-opacity="0.075"
+      />
+    </filter>
+
+    <linearGradient id="cloudRunFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f3ff"/>
+      <stop offset="1" stop-color="#f2effc"/>
+    </linearGradient>
+
+    <marker
+      id="arrowDark"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="8"
+      markerHeight="8"
+      orient="auto-start-reverse"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#44516a"/>
+    </marker>
+
+    <marker
+      id="arrowBlue"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="8"
+      markerHeight="8"
+      orient="auto-start-reverse"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#2563eb"/>
+    </marker>
+
+    <marker
+      id="arrowOrange"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="8"
+      markerHeight="8"
+      orient="auto-start-reverse"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#ea580c"/>
+    </marker>
+
+    <marker
+      id="arrowGreen"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="8"
+      markerHeight="8"
+      orient="auto-start-reverse"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#159557"/>
+    </marker>
+  </defs>
+
+  <rect width="1760" height="1180" fill="#fbfcfe"/>
+
+  <!-- Header -->
+  <text x="60" y="62" font-size="38" font-weight="820" class="ink">
+    CommitmentOS — Architecture
+  </text>
+
+  <text x="60" y="94" font-size="19" class="muted">
+    An email promise becomes protected calendar time — and a control loop keeps it feasible when reality changes.
+  </text>
+
+  <!-- Cloud Run service boundary -->
+  <rect
+    x="480"
+    y="130"
+    width="840"
+    height="880"
+    rx="20"
+    fill="url(#cloudRunFill)"
+    stroke="#7c3aed"
+    stroke-width="2.25"
+  />
+
+  <text
+    x="900"
+    y="174"
+    text-anchor="middle"
+    font-size="25"
+    letter-spacing="1"
+    font-weight="800"
+    fill="#7c3aed"
+  >
+    COMMITMENTOS — ONE SERVICE ON CLOUD RUN
+  </text>
+
+  <!-- ===================================================== -->
+  <!-- LEFT-SIDE CARDS -->
+  <!-- ===================================================== -->
+
+  <g filter="url(#softShadow)">
+    <rect
+      x="60"
+      y="230"
+      width="280"
+      height="100"
+      rx="13"
+      fill="#fff"
+      stroke="#2563eb"
+      stroke-width="2"
+    />
+
+    <rect
+      x="60"
+      y="400"
+      width="280"
+      height="130"
+      rx="13"
+      fill="#fff"
+      stroke="#2563eb"
+      stroke-width="2"
+    />
+
+    <rect
+      x="60"
+      y="600"
+      width="280"
+      height="130"
+      rx="13"
+      fill="#fff"
+      stroke="#334155"
+      stroke-width="2"
+    />
+
+    <rect
+      x="60"
+      y="800"
+      width="280"
+      height="110"
+      rx="13"
+      fill="#fff"
+      stroke="#159557"
+      stroke-width="2"
+    />
+  </g>
+
+  <!-- Gmail -->
+  <text x="200" y="260" text-anchor="middle" class="eyebrow" fill="#2563eb">
+    GOOGLE API
+  </text>
+
+  <text x="200" y="286" text-anchor="middle" class="card-title">
+    Gmail
+  </text>
+
+  <text x="200" y="310" text-anchor="middle" class="body">
+    Where promises are made
+  </text>
+
+  <!-- Google Calendar -->
+  <text x="200" y="430" text-anchor="middle" class="eyebrow" fill="#2563eb">
+    GOOGLE API
+  </text>
+
+  <text x="200" y="456" text-anchor="middle" class="card-title">
+    Google Calendar
+  </text>
+
+  <text x="200" y="480" text-anchor="middle" class="body">
+    Where work time lives —
+  </text>
+
+  <text x="200" y="500" text-anchor="middle" class="body">
+    meetings and reserved blocks
+  </text>
+
+  <!-- Human Authority -->
+  <text x="200" y="630" text-anchor="middle" class="eyebrow" fill="#334155">
+    HUMAN AUTHORITY
+  </text>
+
+  <text x="200" y="656" text-anchor="middle" class="card-title">
+    You
+  </text>
+
+  <text x="200" y="680" text-anchor="middle" class="body">
+    Confirm effort · Approve the plan
+  </text>
+
+  <text x="200" y="700" text-anchor="middle" class="body">
+    Log real minutes · Mark done
+  </text>
+
+  <!-- Cloud Scheduler -->
+  <text x="200" y="830" text-anchor="middle" class="eyebrow" fill="#159557">
+    CLOUD SCHEDULER
+  </text>
+
+  <text
+    x="200"
+    y="856"
+    text-anchor="middle"
+    font-size="20"
+    font-weight="760"
+    class="ink"
+  >
+    Safety sweep
+  </text>
+
+  <text x="200" y="880" text-anchor="middle" class="body">
+    Every minute: catch anything
+  </text>
+
+  <text x="200" y="898" text-anchor="middle" class="body">
+    a push notification missed
+  </text>
+
+  <!-- Five centered process cards -->
+  <g filter="url(#shadow)">
+    <rect
+      x="720"
+      y="215"
+      width="320"
+      height="110"
+      rx="13"
+      fill="#fff"
+      stroke="#7c3aed"
+      stroke-width="2"
+    />
+
+    <rect
+      x="720"
+      y="365"
+      width="320"
+      height="110"
+      rx="13"
+      fill="#fff"
+      stroke="#7c3aed"
+      stroke-width="2"
+    />
+
+    <rect
+      x="720"
+      y="515"
+      width="320"
+      height="110"
+      rx="13"
+      fill="#fff"
+      stroke="#7c3aed"
+      stroke-width="2"
+    />
+
+    <rect
+      x="720"
+      y="665"
+      width="320"
+      height="110"
+      rx="13"
+      fill="#fff"
+      stroke="#7c3aed"
+      stroke-width="2"
+    />
+
+    <rect
+      x="720"
+      y="815"
+      width="320"
+      height="130"
+      rx="13"
+      fill="#fff"
+      stroke="#7c3aed"
+      stroke-width="2"
+    />
+  </g>
+
+  <!-- Observe -->
+  <text x="880" y="247" text-anchor="middle" class="stage-title">
+    1 · Observe
+  </text>
+
+  <text x="880" y="273" text-anchor="middle" class="body">
+    Every push, email, and calendar change
+  </text>
+
+  <text x="880" y="293" text-anchor="middle" class="body">
+    becomes a durable observation
+  </text>
+
+  <!-- Interpret -->
+  <text x="880" y="397" text-anchor="middle" class="stage-title">
+    2 · Interpret
+  </text>
+
+  <text x="880" y="423" text-anchor="middle" class="body">
+    Gemini reads the language;
+  </text>
+
+  <text x="880" y="443" text-anchor="middle" class="body">
+    deterministic validation accepts or rejects
+  </text>
+
+  <!-- Plan -->
+  <text x="880" y="547" text-anchor="middle" class="stage-title">
+    3 · Plan
+  </text>
+
+  <text x="880" y="573" text-anchor="middle" class="body">
+    A deterministic planner reserves
+  </text>
+
+  <text x="880" y="593" text-anchor="middle" class="body">
+    work blocks before the deadline
+  </text>
+
+  <!-- Policy -->
+  <text x="880" y="697" text-anchor="middle" class="stage-title">
+    4 · Policy
+  </text>
+
+  <text x="880" y="723" text-anchor="middle" class="body">
+    Within agreed bounds → Act;
+  </text>
+
+  <text x="880" y="743" text-anchor="middle" class="body">
+    Anything bigger → Ask you first
+  </text>
+
+  <!-- Execute -->
+  <text x="880" y="847" text-anchor="middle" class="stage-title">
+    5 · Execute &amp; Verify
+  </text>
+
+  <text x="880" y="873" text-anchor="middle" class="body">
+    Write to Calendar with an idempotency key
+  </text>
+
+  <text x="880" y="893" text-anchor="middle" class="body">
+    and an If-Match etag, then check the
+  </text>
+
+  <text x="880" y="913" text-anchor="middle" class="body">
+    result matches the intent
+  </text>
+
+  <!-- Primary vertical control flow -->
+  <line
+    x1="880"
+    y1="325"
+    x2="880"
+    y2="365"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <line
+    x1="880"
+    y1="475"
+    x2="880"
+    y2="515"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <line
+    x1="880"
+    y1="625"
+    x2="880"
+    y2="665"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <line
+    x1="880"
+    y1="775"
+    x2="880"
+    y2="815"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <!-- ===================================================== -->
+  <!-- RIGHT-SIDE PLATFORM CARDS -->
+  <!-- ===================================================== -->
+
+  <g filter="url(#softShadow)">
+    <rect
+      x="1350"
+      y="227.5"
+      width="360"
+      height="180"
+      rx="13"
+      fill="#fff"
+      stroke="#2563eb"
+      stroke-width="2"
+    />
+
+    <rect
+      x="1350"
+      y="500"
+      width="360"
+      height="140"
+      rx="13"
+      fill="#fff"
+      stroke="#ea580c"
+      stroke-width="2"
+    />
+
+    <rect
+      x="1350"
+      y="732.5"
+      width="360"
+      height="140"
+      rx="13"
+      fill="#fff"
+      stroke="#159557"
+      stroke-width="2"
+    />
+  </g>
+
+  <!-- Gemini -->
+  <text x="1530" y="257.5" text-anchor="middle" class="eyebrow" fill="#2563eb">
+    EXTERNAL MODEL API
+  </text>
+
+  <text x="1530" y="285.5" text-anchor="middle" class="card-title">
+    Gemini 3.5 Flash
+  </text>
+
+  <text x="1530" y="313.5" text-anchor="middle" class="body">
+    Proposes who promised what, by when —
+  </text>
+
+  <text x="1530" y="333.5" text-anchor="middle" class="body">
+    every claim quotes the exact sentence
+  </text>
+
+  <text
+    x="1530"
+    y="361.5"
+    text-anchor="middle"
+    font-size="14"
+    font-weight="750"
+    fill="#ea580c"
+  >
+    It can read language;
+  </text>
+
+  <text
+    x="1530"
+    y="381.5"
+    text-anchor="middle"
+    font-size="14"
+    font-weight="750"
+    fill="#ea580c"
+  >
+    It can never touch the calendar
+  </text>
+
+  <!-- Firestore -->
+  <text x="1530" y="530" text-anchor="middle" class="eyebrow" fill="#ea580c">
+    FIRESTORE
+  </text>
+
+  <text x="1530" y="558" text-anchor="middle" class="card-title">
+    Durable Truth
+  </text>
+
+  <text x="1530" y="584" text-anchor="middle" class="body">
+    Commitments · Work blocks · Observations
+  </text>
+
+  <text x="1530" y="604" text-anchor="middle" class="body">
+    and a correlated audit timeline
+  </text>
+
+  <!-- Cloud Tasks -->
+  <text x="1530" y="762.5" text-anchor="middle" class="eyebrow" fill="#159557">
+    CLOUD TASKS
+  </text>
+
+  <text x="1530" y="790.5" text-anchor="middle" class="card-title">
+    Durable Steps
+  </text>
+
+  <text x="1530" y="812.5" text-anchor="middle" class="body">
+    Named, idempotent tasks drive synchronization,
+  </text>
+
+  <text x="1530" y="832.5" text-anchor="middle" class="body">
+    reconciliation, and execution — crashes retry
+  </text>
+
+  <text x="1530" y="852.5" text-anchor="middle" class="body">
+    safely without duplicates
+  </text>
+
+  <!-- ===================================================== -->
+  <!-- LEFT-SIDE CONNECTORS -->
+  <!-- ===================================================== -->
+
+  <!-- Gmail -->
+  <path
+    d="M340 280H470 C540 280 610 255 680 255 H720"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <text x="354" y="268" class="note" fill="#44516a">
+    Pub/Sub push
+  </text>
+
+  <!-- Calendar -->
+  <path
+    d="M340 465H520 C610 465 610 285 720 285"
+    class="primary-line"
+    marker-end="url(#arrowDark)"
+  />
+
+  <text x="353" y="482" class="note" fill="#44516a">
+    change webhook
+  </text>
+
+  <text x="100" y="552" class="note" fill="#ea580c">
+    …including changes the agent itself
+  </text>
+
+  <text x="100" y="570" class="note" fill="#ea580c">
+    just made — the loop closes
+  </text>
+
+  <!-- Safety sweep — periodic reconciliation into Observe -->
+  <path
+    d="M340 830H470
+     Q500 830 500 800
+     V340
+     Q500 310 530 310
+     H714"
+    fill="none"
+    stroke="#159557"
+    stroke-width="2.5"
+    stroke-dasharray="8 7"
+    marker-end="url(#arrowGreen)"
+  />
+
+  <text x="514" y="560" class="note" fill="#159557">
+    periodic reconciliation
+  </text>
+
+  <!-- Human Authority -->
+  <path
+    d="M340 665H400 C470 665 530 720 600 720 H720"
+    class="primary-line"
+    marker-start="url(#arrowDark)"
+    marker-end="url(#arrowDark)"
+  />
+
+  <text x="553" y="705" class="note" fill="#44516a">
+    approvals &amp; check-ins
+  </text>
+
+  <!-- Calendar loop — unchanged -->
+  <path
+    d="M714 875H450
+     Q420 875 420 845
+     V545
+     Q420 515 390 515
+     H346"
+    fill="none"
+    stroke="#ea580c"
+    stroke-width="2.5"
+    marker-end="url(#arrowOrange)"
+  />
+
+  <text x="488" y="846" class="note" fill="#ea580c">
+    moves one block — same event ID,
+  </text>
+
+  <text x="488" y="864" class="note" fill="#ea580c">
+    other blocks untouched
+  </text>
+
+  <!-- ===================================================== -->
+  <!-- RIGHT-SIDE BIDIRECTIONAL DASHED CONNECTORS -->
+  <!-- ===================================================== -->
+
+  <!-- Gemini connector -->
+  <path
+    d="M1040 420C1140 420 1250 317.5 1350 317.5"
+    class="dash"
+    stroke="#2563eb"
+    marker-start="url(#arrowBlue)"
+    marker-end="url(#arrowBlue)"
+  />
+
+  <text
+    x="1195"
+    y="357"
+    text-anchor="middle"
+    class="note"
+    fill="#2563eb"
+    transform="rotate(-23.5 1195 354)"
+  >
+    language in · structured proposal out
+  </text>
+
+  <!-- Firestore connector -->
+  <path
+    d="M1040 570H1350"
+    class="dash"
+    stroke="#ea580c"
+    marker-start="url(#arrowOrange)"
+    marker-end="url(#arrowOrange)"
+  />
+
+  <text
+    x="1187"
+    y="555"
+    text-anchor="middle"
+    class="note"
+    fill="#ea580c"
+  >
+    every step reads &amp; writes durable state
+  </text>
+
+  <!-- Cloud Tasks connector -->
+  <path
+    d="M1040 880C1140 880 1250 802.5 1350 802.5"
+    class="dash"
+    stroke="#159557"
+    marker-start="url(#arrowGreen)"
+    marker-end="url(#arrowGreen)"
+  />
+
+  <text
+    x="1195"
+    y="829"
+    text-anchor="middle"
+    class="note"
+    fill="#159557"
+    transform="rotate(-18 1195 825)"
+  >
+    <tspan x="1195" y="812">reconciliation and execution run as</tspan>
+    <tspan x="1195" dy="18">durable, retry-safe tasks</tspan>
+  </text>
+
+  <!-- Bottom principle -->
+  <rect
+    x="60"
+    y="1060"
+    width="1640"
+    height="70"
+    rx="13"
+    fill="#fff"
+    stroke="#d2d9e5"
+    stroke-width="1.5"
+    filter="url(#softShadow)"
+  />
+
+  <text
+    x="880"
+    y="1090"
+    text-anchor="middle"
+    font-size="18"
+    font-weight="760"
+    class="ink"
+  >
+    Gemini interprets language. Deterministic code does everything that can touch a calendar —
+  </text>
+
+  <text
+    x="880"
+    y="1114"
+    text-anchor="middle"
+    font-size="18"
+    font-weight="760"
+    class="ink"
+  >
+    guarded by etags and idempotency keys, replayable, and audited.
+  </text>
+</svg>

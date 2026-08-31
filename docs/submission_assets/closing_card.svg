@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1920" height="1080" fill="#f6f7f9"/>
+
+  <text x="960" y="330" text-anchor="middle" font-size="120" font-weight="800" fill="#16202e">Commitment<tspan fill="#2b4fbf">OS</tspan></text>
+
+  <text x="960" y="440" text-anchor="middle" font-size="46" fill="#5b6575">It doesn&#8217;t plan once. It keeps the promise feasible</text>
+  <text x="960" y="500" text-anchor="middle" font-size="46" fill="#5b6575">as reality changes.</text>
+
+  <g font-size="36">
+    <circle cx="440" cy="668" r="12" fill="#3b66d4"/>
+    <text x="480" y="680"><tspan font-weight="700" fill="#16202e">Try it &#8212; no login&#160;&#160;</tspan><tspan fill="#2b4fbf">commitmentos-2hscowvydq-uw.a.run.app/sandbox</tspan></text>
+
+    <circle cx="440" cy="758" r="12" fill="#1d8a5f"/>
+    <text x="480" y="770"><tspan font-weight="700" fill="#16202e">Walkthrough&#160;&#160;</tspan><tspan fill="#2b4fbf">commitmentos-2hscowvydq-uw.a.run.app/demo</tspan></text>
+
+    <circle cx="440" cy="848" r="12" fill="#c07f1f"/>
+    <text x="480" y="860"><tspan font-weight="700" fill="#16202e">Code + evidence&#160;&#160;</tspan><tspan fill="#2b4fbf">github.com/dcw06/CommitmentOS</tspan></text>
+  </g>
+
+  <text x="960" y="990" text-anchor="middle" font-size="27" fill="#5b6575">Every number in this video is indexed to the exact deployment that produced it.</text>
+</svg>
