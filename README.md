@@ -159,90 +159,36 @@ python scripts/gmail_watch_spike.py register
 python scripts/calendar_watch_spike.py register --service-url <SERVICE_URL>
 ```
 
-Session affinity keeps a process-local sandbox world on the instance that
-created it; the browser still recovers cleanly after recycle or idle expiry.
-The two-instance ceiling bounds aggregate public free-play traffic. Cloud Run
-remains IAM-edge public for the Calendar webhook, while application-layer
-contracts guard every route. Deploys and traffic changes are owner-run.
+Your sandbox world stays with the server instance that created it, so you won’t lose your work even if you restart your browser or your session times out. The system allows only two instances at a time, which helps manage how much public free-play traffic comes in. Cloud Run remains open for Calendar webhooks, but every entry point is locked down with strict access controls. Only the project owner can update deployments or change traffic settings.
 
-The app does not need to stay publicly live outside judging; it scales to
-zero. All measured evidence in `docs/` was produced against the deployed
-service. [`docs/proof_index.md`](docs/proof_index.md) indexes every claim —
-which revision it was measured on and which frozen evidence file records it.
+The app automatically shuts down when it’s not needed—there’s no need to keep it running after judging. Every piece of evidence in the docs folder comes from live tests on the deployed service. If you want to check any claim, docs/proof_index.md shows exactly which version produced it and links to the supporting files.
 
-### Source serialization, cursor recovery, and publication
+Source serialization, cursor recovery, and publication
 
-Gmail Pub/Sub notifications are change signals, not message payloads. The
-receiver durably coalesces concurrent delivery to the greatest observed
-history ID. Actual source work is serialized by a fenced
-`source-sync:gmail:<user>` lease, so only one Gmail generation for the
-controlled user can advance the cursor at a time; duplicate named tasks
-resume or converge on the same generation.
+Gmail Pub/Sub notifications just let the system know there’s been a change—they don’t contain the actual email content. If multiple notifications arrive around the same time, the system merges them and processes only the most recent update. To keep things organized, only one sync job per user can update Gmail data at a time. If the same sync task comes in twice, it’ll just continue from where the last one stopped.
 
-An incremental `history.list` 404 means the published Gmail cursor is no
-longer usable. The failed generation is abandoned, the cursor is marked for
-full resynchronization, and a named full-resync task is queued automatically.
-That generation scans Inbox and Sent only. Before its first mailbox page it
-captures the profile history ID as the next incremental baseline, so mail
-arriving during a multi-page scan is replayed after publication instead of
-falling into a scan/cursor race. Calendar invalid sync tokens follow the same
-automatic full-generation path over the configured time horizon, including
-tombstones for previously published events that disappeared.
+If Gmail history returns a 404, it means the system’s pointer is out of date. When this happens, the sync stops, marks itself for a full resync, and automatically starts a new resync job. It scans only the Inbox and Sent folders. Before it starts, it records the current history ID, so it picks up any new emails that arrive during the scan and nothing slips through the cracks. Calendar sync works the same way, even for deleted events.
 
 Both sources use bounded staging generations:
 
-- One provider page is fetched per named Cloud Task. Normalized generation
-  items, page checkpoints, and commutative manifests make retries independent
-  of worker lifetime and chunk boundaries.
-- Each transaction is capped by configuration at 400 writes and 8 MiB; apply
-  chunks are additionally capped at 100 items (the defaults in
-  `.env.example`). Transaction overhead is reserved before item writes.
-- Observations remain `staged`, and Calendar snapshot data remains behind a
-  publication barrier, while a generation is incomplete. Reconciliation and
-  planning therefore cannot consume a half-applied source view.
-- A single fenced compare-and-set publication transaction verifies staged and
-  applied manifests, promotes the candidate cursor, advances the cursor
-  revision, and clears the barrier. Only then are observations released in
-  bounded batches. The previously published cursor remains authoritative
-  after any pre-publication crash.
+* Every Cloud Task grabs one page of data at a time. Because each page is standardized and tracked with checkpoints, retries are safe and don’t depend on how long a worker has been running or how the data is split up.
+* Each transaction can write up to 400 items or 8 megabytes, as set in the configuration (these are the default values in .env.example). When the system writes data, it works in chunks of up to 100 items and always saves space for transaction overhead before starting.
+* As long as a sync job is running, all new data and Calendar snapshots are kept behind a barrier—they’re not published until everything’s complete. This way, reconciliation and planning never use incomplete or half-finished information.
+* Once syncing is done, a single transaction makes sure everything lines up, updates the cursor and revision, and lifts the publication barrier. Only then are new observations released in safe, manageable batches. If a crash happens before this, the system just sticks with the last published cursor as the official record.
 
-### Authoritative facts versus projections
+Authoritative facts versus projections
 
-Commitments, confirmed effort/deadlines, evidence, work-block execution state,
-verified minutes, Calendar snapshots, approvals, controls, and outbox records
-are authoritative revisioned facts. Portfolio allocation, remaining effort,
-risk, projected finish, shortfall, and shared buffer are replaceable read
-projections. Every projection carries its source commitment revision,
-work-block revision hash, planner-run ID, and calculator version; the dashboard
-exposes allocation fields only while that provenance is current. A stale or
-missing projection is shown as unknown, never promoted into fact.
+Some things are always saved as facts—commitments, confirmed effort and deadlines, evidence, work block status, verified minutes, Calendar snapshots, approvals, controls, and outbox records. Others, like portfolio allocation, remaining effort, risk, projected finish, shortfall, and shared buffer, are just projections that can be recalculated at any time. Each projection includes details about its source, such as which commitment revision and work block version it came from. The dashboard shows allocation details only when they’re up to date; if a projection is missing or outdated, it’s marked as unknown and never treated as fact.
 
-Before external I/O the outbox executor independently reloads authoritative
-revisions, the execution-control epoch, ownership, and observed Calendar etag.
-Stable event IDs make create replay-safe; patch/cancel use `If-Match`, and an
-HTTP 412 stales the intent and requests a fresh source sync. Action results
-return as new observations rather than being inferred from queued intent.
+Before external I/O, the outbox executor independently reloads authoritative revisions, the execution-control epoch, ownership, and observed Calendar etag. Stable event IDs make create replay-safe; patch/cancel use If-Match, and an HTTP 412 stales the intent and requests a fresh source sync. Action results return as new observations rather than being inferred from queued intent.
 
-### Seeded demo, live seed, reset, and evaluation
+Seeded demo, live seed, reset, and evaluation
 
-`/demo` needs no database seed or reset command. It reads packaged scenario
-documents from `backend/src/commitmentos/demo_data/` through a read-only model
-with no Firestore or Google credential adapter, so every request starts from
-the same data and mutations are impossible.
+/demo needs no database seed or reset command. It reads packaged scenario documents from backend/src/commitmentos/demo_data/ through a read-only model with no Firestore or Google credential adapter, so every request starts from the same data and mutations are impossible.
 
-`/sandbox` needs no seed command either: each session builds its own world in
-memory and drops it on idle expiry or instance recycle. "Start over" calls the
-bounded reset endpoint, releasing the old world before opening its replacement.
-Cloud Run session affinity is required by the deployment command because these
-demonstration worlds are intentionally process-local. The sandbox's behavior is
-pinned by `backend/tests/integration/test_sandbox_flow.py` (the story must
-extract, converge onto one commitment, plan, repair a conflict, and verify
-honest minutes) and `backend/tests/contract/test_sandbox_contracts.py`
-(isolation, sender/text validation, free-play and card caps, serialization,
-automatic expiry, reset, and route precedence).
+/sandbox needs no seed command either: each session builds its own world in memory and drops it on idle expiry or instance recycle. "Start over" calls the bounded reset endpoint, releasing the old world before opening its replacement. The deployment command requires Cloud Run session affinity because these demonstration worlds are intentionally process-local. The sandbox's behavior is pinned by backend/tests/integration/test_sandbox_flow.py (the story must extract, converge onto one commitment, plan, repair a conflict, and verify honest minutes) and backend/tests/contract/test_sandbox_contracts.py (isolation, sender/text validation, free-play and card caps, serialization, automatic expiry, reset, and route precedence).
 
-For an end-to-end seed against the deployed service and real Calendar, use the
-audited live driver. Its generated run tag scopes cleanup:
+For an end-to-end seed against the deployed service and real Calendar, use the audited live driver. Its generated run tag scopes cleanup:
 
 ```bash
 .venv/bin/python scripts/run_seeded_slice.py run --cleanup
