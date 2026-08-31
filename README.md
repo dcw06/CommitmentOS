@@ -54,62 +54,13 @@ Each reconciliation run is a tightly controlled **ADK graph call** with two hone
 
 ## Judge mode
 
-Two zero-login surfaces, neither of which touches live data. They
-deliberately tell **different stories**: `/demo` mirrors the measured golden
-scenario the live evidence was earned on, while `/sandbox` runs a separately
-authored thread (plus free play) — so the proofs reinforce each other without
-the agent being hard-coded to a single conversation.
+There are two ways to try CommitmentOS without logging in, and neither one touches any live data. Each is designed for a different purpose: /demo lets you see the exact scenario used to produce the live evidence, while /sandbox lets you use an entirely separate, custom email thread (or just play around freely). This way, both modes prove the system’s claims—without the agent being rigged to a single conversation.
 
-**`/sandbox` — drive it yourself.** Choose one of two isolated lanes per reset:
-the authored end-to-end story, or a free-play email thread with a visible
-subject. In free play, choose Jordan/You and write your own message (including
-several consecutive messages from the same person); once the resulting
-commitment is planned, the same conflict, time-advance, and check-in controls
-remain available for that judge-authored work. In the guided lane, send the
-request, accept it, move the deadline, drop a meeting on
-top of a reserved block, let time pass, log your verified minutes — and watch
-the agent extract, converge, plan, repair, and refuse to inflate progress in
-response. Everything on the right-hand side is produced by the production
-stack: the same interpreter implementation/prompt contract, identity resolver,
-portfolio planner, policy engine, executor, and audit timeline that serve the
-controlled user. The public model instance and key are deliberately separate.
-What is simulated is the world around it — Firestore is a dict, Gmail is a scripted
-mailbox, Calendar is an in-memory store with Google's etag and
-cancelled-event semantics, Cloud Tasks is a list, and the clock is
-advanceable. Each visitor gets a private world; sessions cannot see each
-other, state reads do not extend their life, and worlds expire after 45 idle
-minutes or two hours absolutely. Expiry has its own scheduled deletion, so
-private text is released even if no later request arrives to trigger cleanup.
+/sandbox — take control and explore. Each time you reset, you can pick between two modes: follow a crafted, end-to-end story, or jump into a free-play email thread where you set the subject. In free play, you can take the role of either Jordan or You, send any messages you want (even several in a row from the same person), and once a commitment is created, you get all the same tools—conflict, time advance, and check-in—that a judge would for a real case. The guided lane walks you through sending a request, accepting it, moving deadlines, scheduling over reserved blocks, letting time pass, and logging your minutes—so you can watch the agent extract, plan, repair, and never fake progress along the way. Everything you see in the right-hand panel is powered by the real production stack—using the same interpreter, identity resolver, planner, policy engine, executor, and audit log as the live system. The public model and key are kept totally separate from production. The world around the agent is simulated: Firestore is just a dictionary, Gmail is a pre-scripted mailbox, Calendar is an in-memory store (with real etag and canceled-event behavior), Cloud Tasks is a list, and you can even advance the clock. Each visitor gets their own private sandbox—sessions are isolated, reading state doesn’t keep them alive, and worlds expire after 45 minutes of inactivity or two hours at most. When a world expires, it’s deleted on schedule so private text isn’t kept longer than needed.
 
-Interpretation is the one deliberately live edge. For a guided card, the first
-call for a complete thread/candidate context is real Gemini output and can be
-reused from the bounded process cache. If the model is unavailable, or a
-schema-valid variation violates that card's authored ownership, identity,
-outcome, or deadline contract, the guided story falls back to its recorded
-interpretation and labels the path. Judge-authored messages are different:
-they never enter the shared cache, they run live, and an outage/rejection is
-shown as `custom-unavailable`; a canned interpretation is never substituted.
-Custom source and structured results live only in that process-local world
-until reset/expiry. Custom input is limited to 1,000 characters, 8 messages per
-session, and a rolling 12 requests/minute per instance. Session creation, all
-model methods together, model concurrency, and per-session model use have
-independent bounds. The documented two-instance deployment ceiling plus the
-sandbox-only quota project bound aggregate spend. Sandbox calls have a
-20-second transport/application deadline and no SDK retry; only an HTTP-400
-unsupported-thinking response gets one compatibility retry without thinking.
-The extraction model has no tools, and the production deterministic
-validator is unchanged on both paths — evidence quotes must be exact
-substrings of the source message. This public edge is a separate interpreter
-and lazy client backed by `COMMITMENTOS_SANDBOX_GEMINI_API_KEY_SECRET_REF`;
-production refuses to boot if that reference is absent or equals the
-controlled-data Gemini reference. The referenced key must be issued by a
-sandbox-only quota project.
+Interpretation is the one part that's live. For guided scenarios, the first time a full thread or candidate comes up, you see real Gemini output, which can be reused from a local cache. If the model is down, or if the output doesn’t match the story’s authored rules, the guide falls back to its recorded interpretation and tells you so. For messages written by judges, it’s different: those always run live, never use the shared cache, and if Gemini is unavailable, you’ll see a custom error—never a canned answer. Custom sources and structured results exist only in your sandbox world until it resets or expires. There are limits on what you can do: up to 1,000 characters per message, 8 messages per session, and 12 requests per minute per instance. There are also caps on session creation, model calls, concurrency, and per-session use. The sandbox is deployed with a ceiling of two instances and its own quota pool. Each Gemini call in the sandbox has a 20-second timeout and no retry unless the model returns a specific error. The extraction model has no tools, and the same deterministic validation is used as in production—evidence quotes must exactly match the original message. The sandbox interpreter and client use a separate API key; production won't start if the keys are misconfigured. The sandbox key must come from a project that’s only used for the sandbox quota.
 
-**`/demo` — read the dashboard.** The full dashboard rendering seeded data
-derived from a fixed demonstration scenario. It is read-only by
-construction: the demo read model has no Firestore, credential, or Google
-API access path, and every mutation method under `/demo` is rejected before
-any handler logic. No login required.
+/demo — read the dashboard. Here, you can see the full dashboard filled with seeded data from a fixed demonstration. This mode is completely read-only: it doesn’t connect to Firestore, credentials, or any Google APIs, and any attempt to change data is blocked immediately. No login is ever needed.
 
 ## Repository layout
 
