@@ -28,27 +28,9 @@ Built for Google's **All Things Agentic Hackathon** (Taskmaster track).
 
 ![Architecture](Plan_Final/CommitmentOS_P0_Architecture.png)
 
-One Python/FastAPI service on **Cloud Run** (public IAM edge because Google
-Calendar must reach an HTTPS webhook; every route enforces its own trust
-contract). **Firestore** owns all durable state. **Pub/Sub** carries Gmail
-watch notifications only. Three **Cloud Tasks** queues carry source
-synchronization, reconciliation, and Calendar-action execution as named,
-idempotent tasks. **Cloud Scheduler** drives watch renewal, cursor catch-up,
-dispatch repair, and the once-a-minute safety reconciliation.
-**Secret Manager** holds separate production and public-sandbox Gemini keys,
-the OAuth client, and the controlled account's refresh token. The sandbox key
-is issued from a sandbox-only Gemini quota project so unauthenticated traffic
-cannot consume the controlled-data extraction quota.
+Everything runs as a single Python/FastAPI service on **Cloud Run. The public edge is needed** because Google Calendar has to reach an HTTPS webhook, but every route is locked down with its own trust contract. **Firestore** stores all the important data for good. Pub/Sub only handles Gmail watch notifications. There are three Cloud Tasks queues: one each for syncing sources, reconciling changes, and executing Calendar actions—each handled as a named, idempotent task. **Cloud Scheduler** takes care of renewing watches, catching up cursors, repairing dispatch, and making sure safety reconciliation happens every minute. **Secret Manager** keeps production and sandbox Gemini keys, the OAuth client, and the refresh token for the controlled account separate. The sandbox key comes from a quota project that only serves the public sandbox, so unauthenticated users can't eat up the quota meant for real data.
 
-Every reconciliation run is a **bounded ADK graph invocation** with two honest
-stages: execute the durable reconciliation controller once, then finalize a
-safe run summary. The controller contains the explicit interpretation,
-identity, evidence, portfolio, policy, and outbox stages; the ADK graph does
-not pretend those in-process stages are separate graph nodes. External
-Calendar mutation happens only in a separate replay-safe Cloud Tasks
-executor using stable client-supplied event IDs, `If-Match` preconditions,
-and revision/epoch guards. Nothing waits in memory; the dashboard, approvals,
-and action results continue through new durable observations.
+Each reconciliation run is a tightly controlled **ADK graph call** with two honest stages: first, it runs the durable reconciliation controller; then it finalizes a safe summary of the run. The controller handles everything—interpreting data, tracking identity and evidence, managing your commitments, setting policy, and handling outgoing actions. The ADK graph doesn’t pretend these internal steps are separate nodes. Any changes to your Calendar only happen in a replay-safe Cloud Tasks executor that uses stable, client-chosen event IDs, If-Match checks, and revision guards. Nothing relies on in-memory state—everything, from the dashboard to approvals and results, flows through new, durable records.
 
 | Route class | Trust contract |
 |---|---|
