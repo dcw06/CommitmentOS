@@ -214,33 +214,14 @@ The extraction evaluation uses the current production Gemini model, prompt, sche
 
 ### Post-audit hardening status
 
-The current source includes a post-campaign hardening pass recorded in
-`docs/post_audit_hardening_progress.md`. It removes misleading unused
-scaffolding and closes cursor recovery, channel validation, explanation,
-reopen/priority, policy, audit, outbox, and failure-state gaps. The immutable
-evidence packs still describe the previously deployed revision; this newer
-source must pass a fresh owner-run live/security campaign before its results
-replace or extend those records.
+The current source has gone through a post-campaign hardening round (see docs/post_audit_hardening_progress.md). This update cleans up leftover scaffolding and fills in gaps—like cursor recovery, channel validation, explanations, priority handling, policy, audits, outbox management, and failure states. The evidence packs are still based on the previous deployment, so this newer version will need to pass a new set of live and security checks before its results replace or add to those records.
 
 ## OAuth: publishing mode, scopes, limitations
 
-- **Mode:** External / In production / **unverified personal use** — chosen
-  after an up-front integration spike proved authorization, refresh, watch renewal,
-  revocation, and allowlisting end to end. Refresh tokens do not carry the
-  Testing-mode 7-day expiry; the unverified-app warning is acknowledged for
-  the single controlled account. This is explicitly **not** a claim of
-  public verification or multi-user readiness.
-- **Scopes (exactly four):** `openid`, `userinfo.email`,
-  `calendar.events` (sensitive), `gmail.readonly` (restricted). No send, no
-  modify, no Drive.
-- **Access:** the application allowlists a single controlled account; any
-  other Google identity completes sign-in and receives `account not allowed`
-  with no session. Revocation is grant-wide; the UI surfaces
-  `reauth_required` rather than silently using stale data.
-- **Testing-mode fallback:** if the consent screen must return to External /
-  Testing, treat the restricted-scope refresh token as expiring after seven
-  days. Reconnect at least every seven days, immediately before the golden
-  campaign, and again before recording:
+- **Mode:** External / In production / **unverified personal use. This was** chosen after a hands-on integration run that tested authorization, refresh, watch renewal, revocation, and allowlisting from start to finish. Refresh tokens don’t expire after seven days like in Testing mode, and the unverified-app warning is accepted for the one controlled account. This **isn’t** a claim of public verification or multi-user readiness—just personal deployment.
+- **Scopes (exactly four):** openid, userinfo.email, calendar.events (sensitive), and gmail.readonly (restricted). No sending, no modifying, and no Drive access.
+- **Access:** Only a single controlled account is allowlisted. If anyone else tries to sign in, they’ll see "account not allowed" and won’t get a session. Revoking access applies to the whole grant. If reauthorization is needed, the UI shows a clear message—instead of quietly using out-of-date data.
+- **Testing-mode fallback:** If you have to switch the consent screen back to External / Testing, remember that restricted-scope refresh tokens expire after seven days. Reconnect at least once a week, right before running the main campaign, and again before recording results.
 
   ```bash
   .venv/bin/python scripts/oauth_spike.py authorize --mode testing
@@ -249,67 +230,28 @@ replace or extend those records.
   .venv/bin/python scripts/calendar_watch_spike.py register --service-url <SERVICE_URL>
   ```
 
-  The authorize command stores the new refresh token in Secret Manager and
-  never prints it. In the selected In-production personal-use mode there is
-  no seven-day cadence; reconnect is event-driven whenever
-  `reauth_required` appears, then renew both watches with the same commands.
-- Production multi-tenant token storage is out of scope by design; the
-  controlled account's refresh token lives in Secret Manager.
+  The authorize command saves the new refresh token in Secret Manager—it never prints it out. In personal-use mode, there’s no need to reconnect every seven days; just reconnect whenever you see reauth_required, and then renew both watches with the same commands.
+- This release doesn’t handle multi-user token storage by design—the refresh token for the controlled account is kept in Secret Manager.
 
 ## Evidence and measured results
 
-- **End-to-end campaign:** ten consecutive passing runs of the
-  full scenario against the deployed service — live Gemini interpretation
-  each run, 61/61 checkpoints, conflict-to-repair 7.2–10.2 s (mean 9.1 s),
-  honest verified minutes, byte-identical replay of every observation and
-  action. Per-run JSON + summary: `docs/phase5_evidence/`.
-- **Extraction evaluation (§16.1):** 32 labeled fixtures across 12
-  categories including prompt injection — 100% schema validity, ownership,
-  deadline accuracy, and injection containment at ~$0.0008/message:
-  `docs/phase2_evidence/`.
-- **Live security probes:** session negative matrix, CSRF on every mutation
-  route, wrong OIDC audience/identity on all three internal groups, the
-  full `/demo` mutation matrix, and the `/sandbox` isolation matrix (no
-  session, forged session, off-deck input, cross-session visibility, and
-  controlled-identifier leakage) — all green against the deployed revision.
-- **Fault injection (§16.4):** worker kill + fenced-lease takeover, executor
-  death before/after the Calendar response, create-before-record crash
-  convergence, projection corruption blocking stale execution.
-- Phase-by-phase gate records with sanitized live evidence:
-  `docs/phase*_evidence/`, `docs/Phase_0_Integration_Risk_Spike_Checklist.md`.
+- **End-to-end campaign:** Ten full passing runs of the scenario against the live service—using Gemini interpretation every time, hitting all 61 checkpoints, and recording conflict-to-repair times from 7.2 to 10.2 seconds (average 9.1). All minutes are honestly verified, and every observation and action is replayed exactly. Each run’s JSON and summary are in docs/phase5_evidence/.
+- **Extraction evaluation (§16.1):** 32 labeled examples across 12 different categories—including prompt injection. The results: 100% schema validity, correct ownership and deadline detection, and full injection resistance, all for about $0.0008 per message. See docs/phase2_evidence/.
+- **Live security probes:** The system was tested for session handling, CSRF protection on every mutation, wrong OIDC audience or identity in all three internal groups, the full /demo mutation matrix, and the /sandbox isolation matrix (covering no session, fake session, off-deck input, cross-session visibility, and identifier leaks). All checks passed on the deployed version.
+- **Fault injection (§16.4):** The system was stress-tested with scenarios like killing a worker and taking over its lease, the executor dying before or after the Calendar response, crashing before recording new data, and corrupting projections to block old executions.
+- Each phase’s progress and evidence are recorded (with sensitive data removed) in docs/phase*_evidence/ and docs/Phase_0_Integration_Risk_Spike_Checklist.md.
 
 ## Security and privacy
 
-- Email bodies are processed transiently and never persisted or logged;
-  the ledger stores IDs, minimal excerpts, structured fields, and hashes.
-- Source text enters the model as delimited untrusted data (with delimiter
-  neutralization); the extraction agent has no mutation tools; model output
-  must satisfy a strict schema, and evidence quotes must be exact substrings
-  of the source — the anti-injection anchor.
-- Structured logs pass a redactor (no tokens, cookies, bodies, or addresses);
-  verified against live Cloud Logging at every phase gate.
-- The executor mutates only events carrying CommitmentOS ownership
-  properties, and patch/cancel always sends `If-Match`; a 412 can only mark
-  intent stale and trigger resynchronization.
-- The interactive sandbox is unauthenticated, so its safety is structural
-  rather than procedural: all state and mutation ports are in-memory twins,
-  and its session id travels in an explicit header rather than a cookie
-  (nothing the browser sends automatically carries authority there). Its one
-  external capability is a no-tools model adapter with a separate interpreter,
-  client, secret, and quota project; the production container graph and every
-  controlled-user credential/document remain unreachable. Free-play text can
-  only enter as Jordan or You; length, per-session volume, rolling traffic, and
-  the in-memory cache are capped. Arbitrary text never receives a recorded card
-  fallback, and all model output still crosses strict schema, evidence-anchor,
-  identity, policy, and ownership boundaries before it can mutate even the
-  simulated world.
+- Email bodies are only processed temporarily—they’re never saved or logged. The ledger only stores IDs, small excerpts, structured fields, and hashes.
+- Source text is given to the model as untrusted data with clear boundaries (and delimiters made safe). The extraction agent can’t make any changes, and its output must fit a strict schema. Evidence quotes have to be exact matches from the source—anchoring against injection attacks.
+- All structured logs go through a redactor—so no tokens, cookies, message bodies, or addresses are ever stored. This was checked in live Cloud Logging at every stage.
+- The executor only changes events that have CommitmentOS ownership markers, and every patch or cancel sends an If-Match header. If a 412 response comes back, it just means the intent is out of date and triggers a resync.
+- The interactive sandbox doesn’t require login, so its safety relies on how it’s built: all data and mutation points are mirrored in memory, and the session ID is sent in a header (not a cookie—so nothing is authorized by accident). Its only external link is a no-tools model adapter with its own interpreter, client, secret, and quota. The production environment and all real credentials are completely out of reach. In free play, you can only send text as Jordan or You; limits are set on message length, session volume, traffic, and cache size. Arbitrary text never gets a pre-recorded fallback, and every model output must pass strict rules on schema, evidence, identity, policy, and ownership before it can touch even the sandboxed world.
 
 ## Known limitations
 
-- Single controlled user and calendar by design for this release; multi-user OAuth
-  onboarding, token vaulting, and verification are out of scope.
-- Sent-email completion inference is deliberately excluded — completion is
-  an explicit user act.
-- The unverified-app consent warning is part of the personal-use OAuth mode.
-- Canvas, dependencies, follow-up drafts, and other P1+ features are
-  documented in the plan but intentionally unbuilt.
+- This release is designed for a single controlled user and calendar; multi-user onboarding, token storage, and verification are intentionally left out.
+- The system never guesses when something is complete based on sent email—completion must always be marked by the user.
+- You’ll see an unverified-app consent warning in personal-use OAuth mode—that’s expected.
+- Features like Canvas, dependencies, follow-up drafts, and other top-priority additions are all documented in the plan but haven’t been built yet—by design.
