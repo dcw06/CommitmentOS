@@ -196,8 +196,7 @@ For an end-to-end seed against the deployed service and real Calendar, use the a
 .venv/bin/python scripts/run_seeded_slice.py cleanup --run-tag <tag>
 ```
 
-For a full controlled-account reset, preview the exact owned events and domain
-document counts, then copy the printed revision-bound confirmation phrase:
+To fully reset a controlled account, first review the exact list of owned events and how many documents are in each domain. Then, copy the confirmation phrase that’s printed with the current revision:
 
 ```bash
 .venv/bin/python scripts/reset_controlled_account.py preview
@@ -205,9 +204,7 @@ document counts, then copy the printed revision-bound confirmation phrase:
   --confirm "cleanup <user_id> events=N documents=M"
 ```
 
-The extraction evaluation calls the pinned production Gemini model, prompt,
-wire schema, and deterministic validator. It writes a new result under
-`docs/phase2_evidence/`; do not overwrite the recorded evidence pack:
+The extraction evaluation uses the current production Gemini model, prompt, schema, and deterministic validator. It saves new results under docs/phase2_evidence/—just make sure not to overwrite the existing evidence pack:
 
 ```bash
 .venv/bin/python scripts/run_extraction_eval.py
