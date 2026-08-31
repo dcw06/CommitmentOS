@@ -22,29 +22,12 @@ README is indexed to the exact Cloud Run revision that produced it in
 
 ## What it does
 
-- **Watches Gmail** for commitments you make ("I'll have it back before our
-  Friday 4 p.m. review"), resolving ownership, deadline, and thread identity
-  across restatements and deadline changes — one commitment, never
-  duplicates, with exact evidence excerpts (never stored message bodies).
-- **Reserves real Calendar capacity** with a deterministic portfolio planner:
-  shared free time is allocated once across all active commitments, inside
-  working hours, minimum/maximum block lengths, and daily focus limits.
-  The first plan always requires your approval.
-- **Repairs autonomously** when reality changes: a meeting dropped onto a
-  work block triggers watch → sync → classification → minimal repair — the
-  fewest blocks move the smallest distance, unaffected blocks stay
-  byte-identical, and the repair lands in **~9 seconds** (measured across
-  ten consecutive live campaign runs; budget 15 s warmed / 60 s operational).
-- **Escalates instead of pretending**: out-of-policy repairs (e.g. more than
-  24 hours of total displacement) become explicit approvals; infeasibility, reauthorization, and every
-  failure state are visible in the dashboard — never hidden behind an
-  "on track" badge.
-- **Tracks honest progress**: elapsed time never counts as work. Only
-  explicit check-ins add verified minutes, and completion is an explicit
-  terminal act that never fabricates minutes to match the estimate.
-- **Explains everything**: a full decision timeline records every
-  observation, interpretation, policy decision, outbox write, executor
-  result, and control change.
+- **Watches Your Gmail** for promises you make—like "I'll have it back before our Friday 4 p.m. review." It figures out who owns each commitment, tracks deadlines, and keeps everything tied to the right thread, even if things get restated or deadlines move. You always have one commitment—never duplicates—with exact evidence snippets (and it never stores full message bodies).
+- **Reserves real time on your calendar using a deterministic planner.** It splits your shared free time across all your active commitments—working within your hours, block size limits, and daily focus caps. The first plan always asks for your approval.
+- **Fixes things automatically** when reality changes. If a meeting gets dropped onto a work block, the system detects it, syncs, classifies the conflict, and makes the smallest possible repair—moving only what’s needed and leaving everything else exactly as it was. On average, these repairs finish in about **9 seconds** (measured across ten live campaign runs).
+- **Escalates problems instead of pretending they don't exist.** If a repair would move things too much—like more than 24 hours—it asks for your approval. If something’s impossible or needs reauthorization, every issue is shown clearly in the dashboard—never hidden behind a generic "on track" badge.
+- **Tracks real progress**—just letting time pass doesn’t count as work. Only your check-ins add verified minutes, and marking something as done is always a deliberate, final step. The system never makes up minutes to match the original estimate.
+- **Explains everything along the way**—a detailed timeline captures every observation, interpretation, policy call, calendar update, and any change in control.
 
 ## Architecture
 
