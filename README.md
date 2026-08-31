@@ -9,16 +9,11 @@ promise feasible as reality changes, until completion is verified:
 > reconcile and minimally repair the plan → explain the action → verify
 > completion.
 
-Gemini interprets ambiguous human language into structured, evidence-anchored
-proposals. Deterministic code owns everything consequential: identity
-resolution, state transitions, portfolio capacity, scheduling constraints,
-policy, idempotency, and every Calendar mutation.
+Gemini turns human language into clear, evidence-backed proposals. Deterministic, reliable code handles all the important stuff—like figuring out who’s responsible, updating state, handling scheduling limits, enforcing policies, and making calendar changes.
 
-Built for the **All Things Agentic Hackathon** (Taskmaster track).
+Built for Google's **All Things Agentic Hackathon** (Taskmaster track).
 
-**Measured evidence:** every performance and reliability claim in this
-README is indexed to the exact Cloud Run revision that produced it in
-[`docs/proof_index.md`](docs/proof_index.md).
+**Measured evidence:** Every performance and reliability claim here links back to the exact Cloud Run revision that produced it in [`docs/proof_index.md`](docs/proof_index.md).
 
 ## What it does
 
