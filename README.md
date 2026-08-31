@@ -115,17 +115,9 @@ GRPC_DNS_RESOLVER=native uv run uvicorn --app-dir backend/src \
   commitmentos.main:create_app --factory --port 8080
 ```
 
-The test suite runs entirely against the in-memory Firestore twin — no
-cloud access, no credentials. Running the service itself (including the
-seeded `/demo` views) requires the project's Secret Manager to be
-reachable; the hosted deployment is the zero-setup way to view `/demo`.
+The test suite runs completely in memory, using a Firestore twin—so there’s no cloud access and no credentials needed. To run the service itself (including the demo views with seeded data), you’ll need access to the project’s Secret Manager. If you want to view /demo without any setup, just use the hosted deployment.
 
-Troubleshooting (macOS): some `uv` builds write the venv's `.pth` files
-with the macOS hidden file flag set, and Python 3.13+ silently skips
-hidden `.pth` files (`python -v` shows "Skipping hidden .pth file"),
-breaking `import commitmentos` outside the uvicorn command above. The
-`--app-dir backend/src` flag makes the server immune; for other tools run
-`chflags nohidden .venv/lib/python*/site-packages/*.pth` after a sync.
+Troubleshooting for macOS: Some uv builds accidentally set the hidden file flag on your venv’s .pth files. Starting with Python 3.13, hidden .pth files are silently ignored (you’ll see "Skipping hidden .pth file" in python -v), which can break import commitmentos unless you’re running the uvicorn command above. The --app-dir backend/src flag keeps the server safe from this issue. For other tools, just run chflags nohidden .venv/lib/python*/site-packages/*.pth after syncing.
 
 ## Cloud deployment
 
