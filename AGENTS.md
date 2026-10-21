@@ -70,8 +70,12 @@ it.
 
 ## Verification commands
 
+Portfolio maintenance (2026-10-21): the standalone local read-only preview and
+credential-free CI are documented in `docs/portfolio_maintenance_2026-10-21.md`.
+The original 328-test suite plus the preview regression now contains 329 tests.
+
 ```bash
-.venv/bin/pytest                # full suite — 328 tests, must stay green
+.venv/bin/pytest                # full suite — 329 tests, must stay green
 .venv/bin/ruff check .          # must stay clean (repo enforces check, not format)
 cd frontend && npm run build    # tsc + vite; bundle served from frontend/dist
 ```
